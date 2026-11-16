@@ -1,4 +1,4 @@
-name: Organix DSP and UI Geometry — Fast Preflight
+name: Organix TESTS UNIQUEMENT — SANS AU/VST3
 on:
   push:
     branches: [main, feature/ui-v0.3-precision]
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   dsp-and-layout:
-    name: C++ DSP / 756-window UI geometry regression
+    name: TESTS C++ SEULEMENT — NE PAS TÉLÉCHARGER
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -36,3 +36,13 @@ jobs:
         run: cmake --build build-test --parallel 2
       - name: Execute all tests with failures visible
         run: ctest --test-dir build-test --output-on-failure
+      - name: Indicate that this workflow never produces a plugin
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo "## TESTS UNIQUEMENT — PAS DE PLUGIN TÉLÉCHARGEABLE"
+            echo "Ce workflow vert confirme uniquement les tests C++ et la géométrie."
+            echo "Pour installer Organix, ouvrez le workflow **Organix BUILD AU/VST3 — ARTIFACT OBLIGATOIRE**."
+            echo "Seul un build AU/VST3 avec Artifact publié et re-téléchargé peut être vert."
+          } >> "$GITHUB_STEP_SUMMARY"
