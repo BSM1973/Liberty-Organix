@@ -290,6 +290,7 @@ void OrganixPresetBrowser::applySelection()
             return;
         }
         audio.setStateInformation (buffer.getData(), static_cast<int> (buffer.getSize()));
+        audio.parameters.state.setProperty ("customPresetName", entry.name, nullptr);
     }
     else audio.loadFactoryPreset (entry.factoryIndex);
     if (onApplied) onApplied (entry.name);
@@ -321,6 +322,7 @@ void OrganixPresetBrowser::saveCurrent()
                                       "Cannot create the preset folder."));
         return;
     }
+    audio.parameters.state.setProperty ("customPresetName", legal, nullptr);
     juce::MemoryBlock buffer;
     audio.getStateInformation (buffer);
     if (buffer.isEmpty())
