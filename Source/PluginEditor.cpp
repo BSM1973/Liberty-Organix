@@ -741,17 +741,22 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                                                 footerAll.getWidth() - 34, 24 }, 11.0f, ui::secondary, true);
     else
     {
-        title (g, ui::word (french, "FUSION DES MATÉRIAUX", "DUAL FUSION"), { footerFusion.getX() + 17, footerFusion.getY() + 13, 210, 20 },
+        title (g, ui::word (french, "FUSION A/B", "DUAL FUSION"),
+               { footerFusion.getX() + 17, footerFusion.getY() + 10, 137, 19 },
                11.0f, ui::secondary, true);
         title (g, ui::word (french, "MOUVEMENT", "MOVEMENT"), { footerMotion.getX() + 17, footerMotion.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
         title (g, ui::word (french, "SIGNAL & SORTIE", "SIGNAL & OUTPUT"), { footerOutput.getX() + 17, footerOutput.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
         const auto da = activeMaterial (0), db = activeMaterial (1);
-        title (g, "A / " + ui::materialLabel (da, french) +
-                  "   +   B / " + ui::materialLabel (db, french),
-               { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 270, 18 },
-               10.0f, ui::secondary);
+        // Routing tiles occupy the upper right; A/B labels stay on the left
+        // in separate rows even at the minimum 1240px editor width.
+        title (g, "A / " + ui::materialLabel (da, french),
+               { footerFusion.getX() + 18, footerFusion.getY() + 32, 139, 17 },
+               10.0f, ui::accentFor (da), true);
+        title (g, "B / " + ui::materialLabel (db, french),
+               { footerFusion.getX() + 18, footerFusion.getY() + 49, 139, 17 },
+               10.0f, ui::accentFor (db), true);
     }
     // Deliberate visual breathing room below the three operational cards.
     title (g, ui::word (french, "Façonnez le son. Transformez la matière.",
