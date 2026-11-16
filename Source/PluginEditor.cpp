@@ -353,7 +353,7 @@ void OrganixAudioProcessorEditor::layoutDial (Dial& dial, juce::Rectangle<int> r
     auto content = region.reduced (3, 2);
     dial.value.setBounds (content.removeFromBottom (18));
     dial.label.setBounds (content.removeFromBottom (18));
-    const int diameter = juce::jmax (20, juce::jmin ({ 66, content.getWidth() - 8,
+    const int diameter = juce::jmax (20, std::min ({ 66, content.getWidth() - 8,
                                                       content.getHeight() - 2 }));
     dial.slider.setBounds (content.getCentreX() - diameter / 2,
                            content.getCentreY() - diameter / 2,
