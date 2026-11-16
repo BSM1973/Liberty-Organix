@@ -12,6 +12,7 @@ public:
     {
     public:
         explicit Tile (int index = 0) : mode (index) {}
+        void setMode (int index) { mode = juce::jlimit (0, 3, index); repaint(); }
         void setState (bool selected, bool french)
         {
             if (active != selected || fr != french)
@@ -53,6 +54,7 @@ public:
     {
         for (int i = 0; i < 4; ++i)
         {
+            tiles[static_cast<size_t> (i)].setMode (i);
             tiles[static_cast<size_t> (i)].setState (i == 0, true);
             tiles[static_cast<size_t> (i)].onClick = [this, i]
             {
@@ -90,5 +92,5 @@ public:
 private:
     OrganixAudioProcessor& audio;
     bool french = true;
-    std::array<Tile, 4> tiles {{ Tile (0), Tile (1), Tile (2), Tile (3) }};
+    std::array<Tile, 4> tiles;
 };
