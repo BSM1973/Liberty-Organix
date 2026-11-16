@@ -4,6 +4,7 @@
 #include "MaterialDSP.h"
 #include "FactoryPresets.h"
 #include "OrganixMovement.h"
+#include "MatterDNAModulation.h"
 #include <atomic>
 
 class OrganixAudioProcessor final : public juce::AudioProcessor
@@ -35,6 +36,10 @@ public:
     std::atomic<float> inputRms {0.0f};
     std::atomic<float> outputRms {0.0f};
     std::atomic<float> outputPeak {0.0f};
+    // Read-only UI meters; audio callback is the sole writer.
+    std::atomic<float> dnaEnergy {0.0f}, dnaTransient {0.0f};
+    std::atomic<float> dnaAir {0.0f}, dnaMotion {0.0f};
+    std::atomic<float> dnaCentroid {0.0f}, dnaLow {0.0f}, dnaMid {0.0f}, dnaHigh {0.0f};
     std::atomic<int> currentPreset {0};
 
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
@@ -42,6 +47,7 @@ public:
 private:
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
+    organix::MatterDNA matterDNA;
     juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
     float lastMeterLevel = 0.0f;
     float movementPhase = 0.0f;

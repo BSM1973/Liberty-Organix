@@ -16,3 +16,7 @@ add_test(NAME organix_ui_geometry COMMAND organix_ui_geometry)
 add_executable(organix_motion_width motion_width.cpp)
 target_compile_features(organix_motion_width PRIVATE cxx_std_17)
 add_test(NAME organix_motion_width COMMAND organix_motion_width)
+
+add_executable(organix_matter_dna matter_dna.cpp ../Source/MatterDNA.cpp)
+target_compile_features(organix_matter_dna PRIVATE cxx_std_17)
+add_test(NAME organix_matter_dna COMMAND organix_matter_dna)

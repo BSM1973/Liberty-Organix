@@ -1,5 +1,15 @@
 # Organix — Living Audio Matter
 
+## MATTER DNA — v0.6 (feature branch)
+
+- Genuine low-latency input **FFT spectrum** (1024 points, 256-sample hop), input RMS and transient-following signal analysis.
+- **Crystal** responds to transient strikes; **Vapor** responds to treble/air content; all materials respond to analyzed energy, spectral flux and brightness.
+- Dedicated bilingual **ADN / DNA** control page with six automatable knobs and five live measurements.
+- Disabled by default for compatibility with v0.5 DAW sessions and factory presets.
+- Pure C++ analysis and modulation, no AI, network calls or audio-thread allocations.
+- See [Matter DNA developer notes](docs/MATTER-DNA-v0.6.md). CI green is required before merging; live DAW audition is still a separate gate.
+
+
 ## Premium native GUI v0.2 (feature branch)
 - Visual architecture based on six supplied MATTERFLOW reference images, adapted to the **ORGANIX** brand.
 - Six distinctive native JUCE material views; 3×4 material property grid.

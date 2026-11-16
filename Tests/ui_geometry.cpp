@@ -71,11 +71,22 @@ static bool accepts (int width, int height)
         3 * outputKnobWidth > g.output.w - 24) return false;
 
     // Brand and preset toolbar (including plain FR/EN buttons) must not collide.
-    const int actionSpan = 86 + 120 + 127 + 8;
-    const int toolbarWidth = std::min (485, g.header.w - actionSpan - 315);
+    // Extra 82px DNA tab, preserving the brand without forcing the preset
+    // toolbar into the Liberty wordmark on compact 1240px editor widths.
+    const int actionSpan = 86 + 82 + 120 + 127 + 8;
+    const int toolbarWidth = std::min (485, std::max (340, g.header.w - actionSpan - 366));
     const int toolbarLeft = g.header.right() - actionSpan - toolbarWidth;
     const int brandRight = g.header.x + 59 + 290;
     if (toolbarWidth < 360 || toolbarLeft - brandRight < 16) return false;
+
+    // Six DNA knobs + five live feature meters share a separate footer page.
+    const int meterX = static_cast<int> (std::lround (g.footer.w * 0.605));
+    const int dialCell = std::max (73, (meterX - 43) / 6);
+    const int lastDialRight = 11 + 6 * dialCell;
+    const int meterBarStart = meterX + 129;
+    const int meterBarWidth = g.footer.w - meterBarStart - 43;
+    if (lastDialRight >= meterX - 9 || meterBarWidth < 40 ||
+        g.footer.h < 158 || meterX < 500) return false;
     return true;
 }
 int main()
