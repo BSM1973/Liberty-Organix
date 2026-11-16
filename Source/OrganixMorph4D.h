@@ -43,6 +43,8 @@ public:
     void processFrame (const float in[2], float out[2], int channels,
                        float x, float y) noexcept;
     bool hasPendingTransition (int scene) const noexcept;
+    float wetAt (const std::array<float,4>& weights) const noexcept;
+    float widthAt (const std::array<float,4>& weights) const noexcept;
 
 private:
     struct Pair
