@@ -222,7 +222,7 @@ void MorphRender::configure (float x, float y,
             configureOne (engines[index][static_cast<size_t> (bank)],
                           previous[index], oldBlend, features, controls);
             configureOne (engines[index][static_cast<size_t> (1 - bank)],
-                          target[index], continuousBlend);
+                          target[index], continuousBlend, features, controls);
         }
     }
 }
