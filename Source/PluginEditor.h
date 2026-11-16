@@ -2,6 +2,9 @@
 #include "PluginProcessor.h"
 #include "OrganixUITheme.h"
 #include "OrganixMaterialButton.h"
+#include "OrganixI18n.h"
+#include "OrganixRoutingSelector.h"
+#include "OrganixPresetBrowser.h"
 #include <array>
 #include <memory>
 
@@ -17,12 +20,14 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void setLayer (int layerIndex) { layer = juce::jlimit (0, 1, layerIndex); repaint(); }
     int getLayer() const noexcept { return layer; }
+    void setFrench (bool value) { french = value; repaint(); }
 
 private:
     void timerCallback() override;
     void setXY (juce::Point<float> p);
     OrganixAudioProcessor& audio;
     int layer = 0;
+    bool french = true;
     float clock = 0.0f;
     float visualRms = 0.0f, visualPeak = 0.0f;
     float materialReveal = 1.0f;
@@ -42,7 +47,6 @@ public:
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
-    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
     struct Dial
     {
@@ -60,6 +64,8 @@ private:
     void selectMaterial (int materialIndex);
     void updateMaterialState();
     void refreshPreset();
+    void changeLanguage (bool french);
+    void openBrowser();
     void setAudioToggle (const char* parameterId, bool enabled);
     void layoutDial (Dial& dial, juce::Rectangle<int> area);
     int activeMaterial (int layerIndex) const;
@@ -72,15 +78,21 @@ private:
     MatterView visualizer;
     int selectedLayer = 0;
     bool macroPage = false;
+    bool french = true;
     int lastPreset = -1;
+    int lastFactoryPreset = -1;
+    juce::String currentPresetName;
+    std::unique_ptr<juce::PropertiesFile> uiSettings;
+    std::unique_ptr<OrganixPresetBrowser> browser;
 
-    juce::ComboBox presets, routing;
+    juce::ComboBox language;
+    juce::TextButton presetDisplay { "PRESET" }, browserButton { "BROWSER" };
     juce::TextButton previous { "<" }, next { ">" };
+    OrganixRoutingSelector routeSelector;
     juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" };
     juce::TextButton tabA { "LAYER A" }, tabB { "LAYER B" };
     juce::TextButton enableB { "B ON" };
     std::array<organix::ui::MaterialButton, 6> materialButtons;
-    std::unique_ptr<ComboAttachment> routingAttachment;
     std::array<Dial, 12> properties;
     std::array<Dial, 7> bottom;
     std::array<Dial, 8> macros;
