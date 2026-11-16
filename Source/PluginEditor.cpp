@@ -459,8 +459,9 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         const auto idx = audio.currentPreset.load (std::memory_order_relaxed);
         presets.setSelectedId (1 + (idx + 1) % 100, juce::sendNotificationSync);
     };
-    for (auto* c : { &presets, &previous, &next })
-        addAndMakeVisible (*c);
+    addAndMakeVisible (presets);
+    addAndMakeVisible (previous);
+    addAndMakeVisible (next);
 
     const juce::StringArray routes { "PARALLEL", "SERIAL A > B", "SERIAL B > A", "CROSS-FUSION" };
     for (int i = 0; i < routes.size(); ++i) routing.addItem (routes[i], i + 1);
