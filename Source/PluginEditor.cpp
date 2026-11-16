@@ -637,15 +637,40 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     browserButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff15373e));
     browserButton.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
-    language.addItem ("FR · Français", 1);
-    language.addItem ("EN · English", 2);
-    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
-    language.onChange = [this] { changeLanguage (language.getSelectedId() != 2); };
-    addAndMakeVisible (language);
-    language.setColour (juce::ComboBox::backgroundColourId, ui::inset);
-    language.setColour (juce::ComboBox::textColourId, ui::text);
-    language.setColour (juce::ComboBox::outlineColourId, ui::border);
-    language.setTooltip ("Français / English");
+    // No middle dots, emoji, arrows or font-dependent glyphs: FR and EN are
+    // painted by native JUCE text buttons using universal Latin letters.
+    languageFR.onClick = [this] { changeLanguage (true); };
+    languageEN.onClick = [this] { changeLanguage (false); };
+    languageFR.setTooltip ("Francais");
+    languageEN.setTooltip ("English");
+    addAndMakeVisible (languageFR);
+    addAndMakeVisible (languageEN);
+
+    for (auto* combo : { &trajectorySelect, &divisionSelect })
+    {
+        combo->setColour (juce::ComboBox::backgroundColourId, ui::inset);
+        combo->setColour (juce::ComboBox::textColourId, ui::text);
+        combo->setColour (juce::ComboBox::outlineColourId, ui::border);
+        addAndMakeVisible (*combo);
+    }
+    for (auto* label : { &trajectoryLabel, &divisionLabel })
+    {
+        label->setFont (juce::Font (juce::FontOptions (10.0f)));
+        label->setJustificationType (juce::Justification::centredLeft);
+        label->setColour (juce::Label::textColourId, ui::secondary);
+        addAndMakeVisible (*label);
+    }
+    trajectoryAttachment = std::make_unique<ComboAttachment> (
+        audio.parameters, "motionTrajectory", trajectorySelect);
+    divisionAttachment = std::make_unique<ComboAttachment> (
+        audio.parameters, "motionDivision", divisionSelect);
+    motionFreeButton.onClick = [this]
+    {
+        setAudioToggle ("motionFree", vParam (audio, "motionFree") < 0.5f);
+        refreshMovementState();
+    };
+    addAndMakeVisible (motionFreeButton);
+    populateMovementChoices();
 
     addAndMakeVisible (routeSelector);
     browser = std::make_unique<OrganixPresetBrowser> (audio, *uiSettings);
@@ -686,12 +711,16 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         setupDial (properties[static_cast<size_t> (i)], {}, ui::controls[0][static_cast<size_t> (i)], ui::accentFor (0));
 
     constexpr const char* bottomIds[] = { "fusion", "balance", "drywet",
-                                          "macroMotion", "macroEvolution", "input", "output" };
+                                          "macroMotion", "motionRate", "input", "width", "output" };
     constexpr const char* bottomNames[] = { "FUSION", "BALANCE", "DRY / WET",
-                                            "MOTION", "EVOLUTION", "INPUT", "OUTPUT" };
-    for (int i = 0; i < 7; ++i)
+                                            "MOTION", "RATE", "INPUT", "WIDTH", "OUTPUT" };
+    for (int i = 0; i < 8; ++i)
+    {
+        const int unit = i == 4 ? 2 : i == 5 || i == 7 ? 1 : i == 6 ? 3 : 0;
         setupDial (bottom[static_cast<size_t> (i)], bottomIds[i], bottomNames[i],
-                   i < 3 ? ui::accentFor (1) : i < 5 ? ui::accentFor (3) : ui::accentFor (0), i < 5);
+                   i < 3 ? ui::accentFor (1) : i < 5 ? ui::accentFor (3) : ui::accentFor (0),
+                   unit == 0 || unit == 3, unit);
+    }
     constexpr const char* macroIds[] = { "macroTransform", "macroMotion", "macroEnergy", "macroDensity",
                                          "macroSpace", "macroHarmonics", "macroEvolution", "macroFusion" };
     constexpr const char* macroNames[] = { "TRANSFORM", "MOTION", "ENERGY", "DENSITY",
@@ -714,6 +743,8 @@ OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
     for (auto& dial : properties) dial.attachment.reset();
     for (auto& dial : macros) dial.attachment.reset();
     for (auto& dial : bottom) dial.attachment.reset();
+    trajectoryAttachment.reset();
+    divisionAttachment.reset();
     if (browser != nullptr) browser.reset();
     if (uiSettings != nullptr) uiSettings->saveIfNeeded();
     setLookAndFeel (nullptr);
