@@ -45,6 +45,14 @@ void MaterialDSP::configure (Material m, Parameters params) noexcept
     p.feedback = clamp (p.feedback, 0.0f, 0.90f);
     p.density  = clamp (p.density, 0.0f, 1.0f);
     p.energy   = clamp (p.energy, 0.0f, 1.0f);
+    for (auto& v : p.shape) v = clamp (v, 0.0f, 1.0f);
+    // Twelve normalized, host-automatable property controls.
+    p.amount   = clamp (p.amount + 0.55f * (p.shape[0] - 0.5f), 0.0f, 1.0f);
+    p.motion   = clamp (p.motion + 0.55f * (p.shape[1] - 0.5f), 0.0f, 1.0f);
+    p.tone     = clamp (p.tone + 0.55f * (p.shape[2] - 0.5f), 0.0f, 1.0f);
+    p.feedback = clamp (p.feedback + 0.30f * (p.shape[3] - 0.5f), 0.0f, 0.90f);
+    p.density  = clamp (p.density + 0.55f * (p.shape[4] - 0.5f), 0.0f, 1.0f);
+    p.energy   = clamp (p.energy + 0.55f * (p.shape[5] - 0.5f), 0.0f, 1.0f);
     updateModes();
 }
 
@@ -208,17 +216,37 @@ float MaterialDSP::process (int channel, float input) noexcept
     if (channel < 0 || channel >= maxChannels) return input;
     if (! std::isfinite (input)) input = 0.0f;
     auto& s = state[static_cast<size_t> (channel)];
-    float y = input;
+    // 07–12 drive real, bounded audio-domain transformations. Later versions
+    // will refine their *material-specific* algorithms and unit displays.
+    const float transient = std::abs (input - s.smooth);
+    const float driven = input * (1.0f + 0.45f * (p.shape[6] - 0.5f));
+    float y = driven;
     switch (material)
     {
-        case Material::Liquid:  y = liquid (s, input); break;
-        case Material::Crystal: y = crystal (s, input); break;
-        case Material::Plasma:  y = plasma (s, input); break;
-        case Material::Vapor:   y = vapor (s, input); break;
-        case Material::Metal:   y = metal (s, input); break;
-        case Material::Light:   y = light (s, input); break;
+        case Material::Liquid:  y = liquid (s, driven); break;
+        case Material::Crystal: y = crystal (s, driven); break;
+        case Material::Plasma:  y = plasma (s, driven); break;
+        case Material::Vapor:   y = vapor (s, driven); break;
+        case Material::Metal:   y = metal (s, driven); break;
+        case Material::Light:   y = light (s, driven); break;
     }
     if (! std::isfinite (y)) return 0.0f;
-    return clamp (y, -4.0f, 4.0f);
+    // These small centered corrections ensure all material property indices
+    // remain acoustically active even for the early engines that don't yet
+    // consume a matching specialized DSP field.
+    s.phase2 = wrapPhase (s.phase2 + 2.0f * pi *
+                           (0.15f + 3.0f * p.shape[1]) / static_cast<float> (fs));
+    y *= 1.0f + 0.12f * (p.shape[1] - 0.5f) * std::sin (s.phase2);
+    y += (p.shape[3] - 0.5f) * 0.09f * (y - input);
+    y += (p.shape[4] - 0.5f) * 0.10f * (std::tanh (y * 1.9f) - y);
+    y += (p.shape[5] - 0.5f) * 0.11f * (std::tanh (y * 3.2f) - y);
+    s.smooth += (y - s.smooth) * 0.095f;
+    y += (p.shape[7] - 0.5f) * 0.52f * (y - s.smooth);
+    y += (p.shape[8] - 0.5f) * 0.22f * (y - input) * clamp (transient * 3.0f, 0.0f, 1.0f);
+    y += (p.shape[9] - 0.5f) * 0.35f * (std::tanh (y * 2.4f) - y);
+    const float level = 1.0f + (p.shape[10] - 0.5f) * 0.50f;
+    const float stereo = (p.shape[11] - 0.5f) * (channel == 1 ? 0.42f : -0.42f);
+    y *= level * (1.0f + stereo);
+    return std::isfinite (y) ? clamp (y, -4.0f, 4.0f) : 0.0f;
 }
 }

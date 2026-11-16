@@ -1,5 +1,16 @@
 # Organix — Living Audio Matter
 
+## Premium native GUI v0.2 (feature branch)
+- Visual architecture based on six supplied MATTERFLOW reference images, adapted to the **ORGANIX** brand.
+- Six distinctive native JUCE material views; 3×4 material property grid.
+- Editable layer A/B; 24 persistent, automatable property values and real bounded prototype audio effects.
+- Elegant matte knob rendering, dark midnight design tokens, responsive three-panel footer and eight-macro view.
+- Six technical UI documents under `docs/UI-*.md`.
+- Material-specific DSP is *prototype-grade*: nonlinear/ring/granular/resonator/delay engines exist, but STFT spectral resynthesis, complete trajectory editing, physics and final 100-preset listening QA are still outstanding.
+- Build status: verify the CI workflow for the latest commit. CI compilation alone does not validate DAW audio, usability or distribution signing.
+
+
+
 **Liberty Music Software**  
 *Shape Sound. Transform Matter. Create the Impossible.*
 
@@ -34,7 +45,7 @@ cmake --build build --config Release --parallel 4
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-**macOS:** JUCE builds AU, VST3 and Standalone. **Windows:** JUCE builds VST3 and Standalone. This version is not signed or notarized. The CI build is a *proposed* workflow; actual GitHub Actions compilation has not yet run.
+**macOS:** JUCE builds AU, VST3 and Standalone. **Windows:** JUCE builds VST3 and Standalone. This version is not signed or notarized. GitHub Actions has validated the v0.1 AU/VST3 macOS ARM64 build. The new v0.2 UI branch needs a separate green CI run and manual DAW visual/audio validation.
 
 To run only dependency-free DSP tests (on any platform with C++17):
 

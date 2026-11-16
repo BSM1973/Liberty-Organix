@@ -1,13 +1,23 @@
 name: Organix AU/VST3 — macOS ARM64
 on:
   push:
+    branches: [main]
     paths:
       - 'Source/**'
       - 'Tests/**'
       - 'CMakeLists.txt'
       - '.github/workflows/build.yml'
   pull_request:
+    paths:
+      - 'Source/**'
+      - 'Tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
+
+concurrency:
+  group: organix-macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   macos-arm64:
@@ -41,7 +51,7 @@ jobs:
           ditto -c -k --keepParent "$VST3" Organix-VST3-macOS-arm64.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Organix-v0.1-macOS-arm64-AU-VST3
+          name: Organix-v0.2-macOS-arm64-AU-VST3
           path: |
             Organix-AU-macOS-arm64.zip
             Organix-VST3-macOS-arm64.zip
