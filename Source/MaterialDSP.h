@@ -19,6 +19,10 @@ struct Parameters
     float feedback = 0.20f; // 0..0.95
     float density = 0.5f;   // 0..1
     float energy = 0.5f;    // 0..1
+    // Twelve normalized, host-automatable, per-layer material properties.
+    // Values are interpreted differently for LIQUID/CRYSTAL/PLASMA/VAPOR/METAL/LIGHT.
+    std::array<float, 12> shape {{ 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f,
+                                   0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }};
 };
 
 class MaterialDSP
