@@ -221,6 +221,33 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     engineA.configure (aMaterial, a);
     if (activeB) engineB.configure (bMaterial, b);
 
+    // Consume coherent scene snapshots from lock-free atomic mailboxes. A
+    // mid-write snapshot is skipped this block rather than blocking audio.
+    for (int scene = 0; scene < 4; ++scene)
+    {
+        auto& slot = morphMailbox[static_cast<size_t> (scene)];
+        const uint32_t version = slot.version.load (std::memory_order_acquire);
+        if ((version & 1u) != 0u || version == receivedVersions[static_cast<size_t> (scene)])
+            continue;
+        std::array<float, organix::MorphScene::packedCount> packed {};
+        for (size_t index = 0; index < packed.size(); ++index)
+            packed[index] = slot.data[index].load (std::memory_order_relaxed);
+        if (version == slot.version.load (std::memory_order_acquire))
+        {
+            morphRender.setScene (scene, organix::MorphScene::unpack (packed));
+            receivedVersions[static_cast<size_t> (scene)] = version;
+        }
+    }
+    const float morphXTarget = raw (parameters, "morphX");
+    const float morphYTarget = raw (parameters, "morphY");
+    const bool morphEnabled = raw (parameters, "morphEnable") > 0.5f;
+    morphBlendSmooth.setTargetValue (morphEnabled ? 1.0f : 0.0f);
+    morphXSmooth.setTargetValue (morphXTarget);
+    morphYSmooth.setTargetValue (morphYTarget);
+    const bool renderMorph = morphEnabled || morphBlendSmooth.getCurrentValue() > 0.00001f;
+    if (renderMorph)
+        morphRender.configure (morphXSmooth.getCurrentValue(), morphYSmooth.getCurrentValue());
+
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
     wetSmooth.setTargetValue (raw (parameters, "drywet"));
     bypassSmooth.setTargetValue (raw (parameters, "bypass") > 0.5f ? 0.0f : 1.0f);
@@ -263,6 +290,9 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float active = bypassSmooth.getNextValue();
         const float gain = outputSmooth.getNextValue();
         const float width = widthSmooth.getNextValue();
+        const float morphFraction = morphBlendSmooth.getNextValue();
+        const float morphX = morphXSmooth.getNextValue();
+        const float morphY = morphYSmooth.getNextValue();
         float originals[2] = {0.0f, 0.0f};
         float inputs[2] = {0.0f, 0.0f};
         float processed[2] = {0.0f, 0.0f};
@@ -273,19 +303,23 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const float original = std::isfinite (sample) ? sample : 0.0f;
             const float x = original * inputGain;
             float y = x;
-            if (! activeB)
-                y = engineA.process (ch, x);
-            else if (routing == 1)
-                y = engineB.process (ch, engineA.process (ch, x));
-            else if (routing == 2)
-                y = engineA.process (ch, engineB.process (ch, x));
-            else
+            // Skip the old processor when it is entirely masked by morphing.
+            if (morphFraction < 0.99999f)
             {
-                const float xa = engineA.process (ch, x);
-                const float xb = engineB.process (ch, x);
-                y = (1.0f - balance) * xa + balance * xb;
-                if (routing == 3)
-                    y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
+                if (! activeB)
+                    y = engineA.process (ch, x);
+                else if (routing == 1)
+                    y = engineB.process (ch, engineA.process (ch, x));
+                else if (routing == 2)
+                    y = engineA.process (ch, engineB.process (ch, x));
+                else
+                {
+                    const float xa = engineA.process (ch, x);
+                    const float xb = engineB.process (ch, x);
+                    y = (1.0f - balance) * xa + balance * xb;
+                    if (routing == 3)
+                        y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
+                }
             }
             originals[ch] = original;
             inputs[ch] = x;
@@ -298,9 +332,27 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (channels == 2)
             organix::StereoWidth::process (processed[0], processed[1], width);
 
+        float morphProcessed[2] {};
+        float morphWet = wet;
+        if (renderMorph && morphFraction > 0.00001f)
+        {
+            const auto weights = organix::Morph4D::weights (morphX, morphY);
+            morphRender.processFrame (inputs, morphProcessed, channels, morphX, morphY);
+            if (channels == 2)
+                organix::StereoWidth::process (
+                    morphProcessed[0], morphProcessed[1], morphRender.widthAt (weights));
+            // Crossfade both DSP and saved per-scene wet values, with global
+            // movement retained as a modulation source across both modes.
+            morphWet = organix::Movement::scaleWet (
+                morphRender.wetAt (weights), movementAmount, modulation);
+        }
+
         for (int ch = 0; ch < channels; ++ch)
         {
-            const float mixed = (inputs[ch] * (1.0f - wet) + processed[ch] * wet) * gain;
+            const float base = inputs[ch] * (1.0f - wet) + processed[ch] * wet;
+            const float morph = inputs[ch] * (1.0f - morphWet) + morphProcessed[ch] * morphWet;
+            const float mixed = (base * (1.0f - morphFraction) +
+                                 morph * morphFraction) * gain;
             const float out = std::abs (mixed) < 0.96f
                 ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
             const float effect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
