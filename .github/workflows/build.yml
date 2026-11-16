@@ -1,4 +1,4 @@
-name: Organix AU/VST3 — macOS ARM64
+name: Organix BUILD AU/VST3 — ARTIFACT OBLIGATOIRE
 on:
   push:
     branches: [main, feature/ui-v0.3-precision]
@@ -6,23 +6,30 @@ on:
       - 'Source/**'
       - 'Tests/**'
       - 'CMakeLists.txt'
+      - 'tools/**'
       - '.github/workflows/build.yml'
   pull_request:
     paths:
       - 'Source/**'
       - 'Tests/**'
       - 'CMakeLists.txt'
+      - 'tools/**'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
   group: organix-macos-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   macos-arm64:
-    name: macOS Apple Silicon — AU + VST3 + Tests
+    name: macOS AU + VST3 + ARTIFACT RÉEL VÉRIFIÉ
     runs-on: macos-15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Confirm native Apple Silicon
@@ -32,6 +39,19 @@ jobs:
           test "$(uname -m)" = "arm64"
       - name: Validate UI UTF-8 and missing-glyph policy
         run: python3 tools/check_ui_text.py
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import pathlib
+          import re
+          source = pathlib.Path("CMakeLists.txt").read_text(encoding="utf-8")
+          match = re.search(r"project\\(Organix VERSION ([0-9]+\\.[0-9]+\\.[0-9]+)", source)
+          if not match:
+              raise SystemExit("Missing Organix VERSION in CMakeLists.txt")
+          print("number=" + match.group(1))
+          PY
       - name: Configure JUCE 8 / CMake for ARM64
         run: cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release
       - name: Build Audio Unit, VST3, Standalone and DSP tests
@@ -51,10 +71,23 @@ jobs:
           lipo -archs "$VST3/Contents/MacOS/Organix" | grep -qw arm64
           ditto -c -k --keepParent "$AU" Organix-AU-macOS-arm64.zip
           ditto -c -k --keepParent "$VST3" Organix-VST3-macOS-arm64.zip
-      - uses: actions/upload-artifact@v4
+      - name: RELEASE GATE 1 — Verify both local AU/VST3 archives
+        run: python3 tools/verify_downloadable_artifact.py local
+      - name: Publish mandatory AU/VST3 downloads
+        id: published
+        uses: actions/upload-artifact@v4
         with:
-          name: Organix-v0.9-macOS-arm64-AU-VST3
+          name: Organix-v${{ steps.version.outputs.number }}-macOS-arm64-AU-VST3
           path: |
             Organix-AU-macOS-arm64.zip
             Organix-VST3-macOS-arm64.zip
           if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+      - name: RELEASE GATE 2 — Download published artifact and verify AU/VST3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ steps.published.outputs.artifact-id }}
+          EXPECTED_ARTIFACT_NAME: Organix-v${{ steps.version.outputs.number }}-macOS-arm64-AU-VST3
+        run: python3 tools/verify_downloadable_artifact.py published
+
