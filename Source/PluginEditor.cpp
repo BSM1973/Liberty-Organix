@@ -522,19 +522,26 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     visualizer.setFrench (french);
     routeSelector.setFrench (french);
     if (browser != nullptr) browser->setFrench (french);
-    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    languageFR.setColour (juce::TextButton::buttonColourId, french ? ui::inset.brighter (0.22f) : ui::surface);
+    languageEN.setColour (juce::TextButton::buttonColourId, french ? ui::surface : ui::inset.brighter (0.22f));
+    languageFR.setColour (juce::TextButton::textColourOffId, french ? ui::accentFor (0) : ui::secondary);
+    languageEN.setColour (juce::TextButton::textColourOffId, french ? ui::secondary : ui::accentFor (0));
+    populateMovementChoices();
+    refreshMovementState();
     browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
     macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
                                        : ui::word (french, "MACROS", "MACROS"));
     tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
     tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
     constexpr const char* frBottom[] = {
-        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "ÉVOLUTION", "ENTRÉE", "SORTIE"
+        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "VITESSE",
+        "ENTRÉE", "LARGEUR", "SORTIE"
     };
     constexpr const char* enBottom[] = {
-        "FUSION", "BALANCE", "DRY / WET", "MOTION", "EVOLUTION", "INPUT", "OUTPUT"
+        "FUSION", "BALANCE", "DRY / WET", "MOTION", "RATE",
+        "INPUT", "WIDTH", "OUTPUT"
     };
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
         bottom[static_cast<size_t> (i)].label.setText (
             juce::String::fromUTF8 (french ? frBottom[i] : enBottom[i]), juce::dontSendNotification);
     constexpr const char* frMacros[] = {
@@ -552,6 +559,40 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     bindProperties();
     updateMaterialState();
     repaint();
+}
+
+void OrganixAudioProcessorEditor::populateMovementChoices()
+{
+    const int lastTrajectory = trajectorySelect.getSelectedId();
+    const int lastDivision = divisionSelect.getSelectedId();
+    trajectorySelect.clear (juce::dontSendNotification);
+    constexpr const char* frenchModes[] = {"MANUEL", "SINUS", "TRIANGLE", "IMPULSION", "ALEATOIRE"};
+    constexpr const char* englishModes[] = {"MANUAL", "SINE", "TRIANGLE", "PULSE", "RANDOM HOLD"};
+    for (int i = 0; i < 5; ++i)
+        trajectorySelect.addItem (french ? frenchModes[i] : englishModes[i], i + 1);
+    divisionSelect.clear (juce::dontSendNotification);
+    constexpr const char* beatValues[] = { "1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T" };
+    for (int i = 0; i < 7; ++i) divisionSelect.addItem (beatValues[i], i + 1);
+    trajectorySelect.setSelectedId (lastTrajectory > 0 ? lastTrajectory : 1, juce::dontSendNotification);
+    divisionSelect.setSelectedId (lastDivision > 0 ? lastDivision : 3, juce::dontSendNotification);
+    trajectoryLabel.setText (ui::word (french, "TRAJECTOIRE", "TRAJECTORY"), juce::dontSendNotification);
+    divisionLabel.setText (ui::word (french, "DIVISION RYTHMIQUE", "BEAT DIVISION"), juce::dontSendNotification);
+}
+void OrganixAudioProcessorEditor::refreshMovementState()
+{
+    const bool isFree = vParam (audio, "motionFree") > 0.5f;
+    motionFreeButton.setButtonText (isFree ? ui::word (french, "LIBRE", "FREE") : "SYNC");
+    motionFreeButton.setColour (juce::TextButton::buttonColourId,
+                                isFree ? ui::inset : juce::Colour (0xff193d4c));
+    motionFreeButton.setColour (juce::TextButton::textColourOffId,
+                                isFree ? ui::secondary : ui::accentFor (0));
+    // The division still reflects its stored value while FREE is active,
+    // but visibly disables until host-tempo mode is selected.
+    divisionSelect.setEnabled (! isFree);
+    divisionLabel.setColour (juce::Label::textColourId, isFree ? ui::subdued : ui::secondary);
+    bottom[4].slider.setEnabled (isFree);
+    bottom[4].label.setColour (juce::Label::textColourId, isFree ? ui::secondary : ui::subdued);
+    bottom[4].value.setColour (juce::Label::textColourId, isFree ? ui::accentFor (3) : ui::subdued);
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
