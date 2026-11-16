@@ -47,6 +47,30 @@ MatterView::~MatterView()
     if (gestureX != nullptr) gestureX->endChangeGesture();
     if (gestureY != nullptr) gestureY->endChangeGesture();
 }
+void MatterView::timerCallback()
+{
+    // All animation work stays on the GUI message thread. No buffer or
+    // allocation is introduced in processBlock().
+    if (! isShowing()) return;
+    const int id = juce::jlimit (0, 5, static_cast<int> (
+        vParam (audio, layer == 0 ? "materialA" : "materialB")));
+    if (priorMaterial != id)
+    {
+        priorMaterial = id;
+        materialReveal = 0.0f;
+    }
+    const float rms = juce::jlimit (0.0f, 1.0f,
+        audio.outputRms.load (std::memory_order_relaxed) * 3.8f);
+    const float peak = juce::jlimit (0.0f, 1.0f,
+        audio.outputPeak.load (std::memory_order_relaxed));
+    visualRms += (rms - visualRms) * (rms > visualRms ? 0.24f : 0.12f);
+    visualPeak = juce::jmax (peak, visualPeak * 0.87f);
+    const float movement = vParam (audio, layer == 0 ? "aMotion" : "bMotion");
+    clock += 0.012f + movement * 0.018f;
+    if (clock >= 1000.0f) clock -= 1000.0f;
+    materialReveal = juce::jmin (1.0f, materialReveal + 0.10f);
+    repaint();
+}
 void MatterView::setXY (juce::Point<float> point)
 {
     const auto plot = getLocalBounds().toFloat().reduced (20.0f, 20.0f)
@@ -82,14 +106,10 @@ void MatterView::paint (juce::Graphics& g)
     const int id = juce::jlimit (0, 5, static_cast<int> (vParam (audio, layer == 0 ? "materialA" : "materialB")));
     const int other = juce::jlimit (0, 5, static_cast<int> (vParam (audio, layer == 0 ? "materialB" : "materialA")));
     const auto accent = ui::accentFor (id);
-    const float energy = juce::jlimit (0.0f, 1.0f, audio.outputRms.load (std::memory_order_relaxed) * 3.8f);
-    const float peak = juce::jlimit (0.0f, 1.0f, audio.outputPeak.load (std::memory_order_relaxed));
-    const float movement = vParam (audio, layer == 0 ? "aMotion" : "bMotion");
+    const float energy = visualRms;
+    const float peak = visualPeak;
     const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
     const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
-    clock += 0.012f + movement * 0.018f;
-    if (clock > 1000.0f) clock = 0.0f;
-
     const auto whole = getLocalBounds();
     title (g, "INTERACTIVE SOUND FIELD", whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
            10.0f, ui::subdued, true);
@@ -97,10 +117,13 @@ void MatterView::paint (juce::Graphics& g)
            26.0f, accent, false);
     title (g, layer == 0 ? "/ A" : "/ B", whole.withTrimmedLeft (191).withTrimmedTop (42).withHeight (21),
            11.0f, ui::subdued, true);
-    title (g, "FUSED WITH", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
+    const bool secondActive = vParam (audio, "enableB") > 0.5f;
+    title (g, secondActive ? "FUSED WITH" : "SECOND LAYER", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
            9.0f, ui::subdued, true, juce::Justification::centredRight);
-    title (g, ui::name[static_cast<size_t> (other)], whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
-           11.0f, ui::accentFor (other), true, juce::Justification::centredRight);
+    title (g, secondActive ? ui::name[static_cast<size_t> (other)] : "DISENGAGED",
+           whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
+           11.0f, secondActive ? ui::accentFor (other) : ui::subdued,
+           true, juce::Justification::centredRight);
     g.setColour (ui::border); g.drawLine (20.0f, 84.0f, rect.getRight() - 20.0f, 84.0f, 1.0f);
     title (g, "MATERIAL SURFACE", whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::subdued);
@@ -127,6 +150,8 @@ void MatterView::paint (juce::Graphics& g)
     g.setColour (accent.withAlpha (0.18f));
     g.drawEllipse (cx - radius * 1.1f, cy - radius * 1.1f, radius * 2.2f, radius * 2.2f, 1.0f);
 
+    // Reveal the new engine over ten frames instead of snapping.
+    g.beginTransparencyLayer (materialReveal);
     if (id == 0) // LIQUID: nested fluid contour waves.
     {
         for (int ring = 0; ring < 13; ++ring)
@@ -251,6 +276,7 @@ void MatterView::paint (juce::Graphics& g)
         }
     }
 
+    g.endTransparencyLayer();
     g.setColour (accent.withAlpha (0.78f));
     g.drawEllipse (cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, 1.0f);
     g.drawLine (cx - 5.0f, cy, cx + 5.0f, cy, 1.0f);
