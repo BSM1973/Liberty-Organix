@@ -4,3 +4,7 @@ add_test(NAME organix_dsp_smoke COMMAND organix_dsp_smoke)
 add_executable(organix_preset_registry preset_registry.cpp)
 target_compile_features(organix_preset_registry PRIVATE cxx_std_17)
 add_test(NAME organix_preset_registry COMMAND organix_preset_registry)
+
+add_executable(organix_material_controls material_controls.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_material_controls PRIVATE cxx_std_17)
+add_test(NAME organix_material_controls COMMAND organix_material_controls)
