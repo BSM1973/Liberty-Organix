@@ -22,7 +22,7 @@ const juce::Colour materialColours[] = {
 MatterView::MatterView (OrganixAudioProcessor& p) : processor (p)
 {
     setInterceptsMouseClicks (true, false);
-    setTooltip ("Drag horizontally for MOTION, vertically for TONE. Controls actual DSP parameters.");
+    // Tooltip omitted: MatterView is a plain Component; JUCE tooltip support requires a dedicated client.
     startTimerHz (30); // rendering is entirely isolated from the audio callback
 }
 
