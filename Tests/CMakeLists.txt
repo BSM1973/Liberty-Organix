@@ -20,3 +20,7 @@ add_test(NAME organix_motion_width COMMAND organix_motion_width)
 add_executable(organix_matter_dna matter_dna.cpp ../Source/MatterDNA.cpp)
 target_compile_features(organix_matter_dna PRIVATE cxx_std_17)
 add_test(NAME organix_matter_dna COMMAND organix_matter_dna)
+
+add_executable(organix_morph_4d morph_4d.cpp ../Source/OrganixMorph4D.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_morph_4d PRIVATE cxx_std_17)
+add_test(NAME organix_morph_4d COMMAND organix_morph_4d)
