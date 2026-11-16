@@ -116,23 +116,26 @@ void MatterView::paint (juce::Graphics& g)
     const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
     const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
     const auto whole = getLocalBounds();
-    title (g, "INTERACTIVE SOUND FIELD", whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
+    title (g, ui::word (french, "CHAMP SONORE INTERACTIF", "INTERACTIVE SOUND FIELD"), whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
            10.0f, ui::subdued, true);
-    title (g, ui::name[static_cast<size_t> (id)], whole.withTrimmedLeft (22).withTrimmedTop (34).withHeight (34),
+    title (g, ui::materialLabel (id, french), whole.withTrimmedLeft (22).withTrimmedTop (34).withHeight (34),
            26.0f, accent, false);
     title (g, layer == 0 ? "/ A" : "/ B", whole.withTrimmedLeft (191).withTrimmedTop (42).withHeight (21),
            11.0f, ui::subdued, true);
     const bool secondActive = vParam (audio, "enableB") > 0.5f;
-    title (g, secondActive ? "FUSED WITH" : "SECOND LAYER", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
+    title (g, secondActive ? ui::word (french, "FUSION AVEC", "FUSED WITH") :
+                                    ui::word (french, "SECONDE COUCHE", "SECOND LAYER"), whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
            9.0f, ui::subdued, true, juce::Justification::centredRight);
-    title (g, secondActive ? ui::name[static_cast<size_t> (other)] : "DISENGAGED",
+    title (g, secondActive ? ui::materialLabel (other, french) :
+                          ui::word (french, "DÉSACTIVÉE", "DISENGAGED"),
            whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
            11.0f, secondActive ? ui::accentFor (other) : ui::subdued,
            true, juce::Justification::centredRight);
     g.setColour (ui::border); g.drawLine (20.0f, 84.0f, rect.getRight() - 20.0f, 84.0f, 1.0f);
-    title (g, "MATERIAL SURFACE", whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
+    title (g, ui::word (french, "SURFACE DU MATÉRIAU", "MATERIAL SURFACE"), whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::subdued);
-    title (g, "LIVE DSP / AUDIO-REACTIVE", whole.withTrimmedRight (24).withTrimmedTop (89).withHeight (24),
+    title (g, ui::word (french, "DSP TEMPS RÉEL / RÉACTIF AU SON",
+                                   "LIVE DSP / AUDIO-REACTIVE"), whole.withTrimmedRight (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::secondary, false, juce::Justification::centredRight);
 
     const float top = 125.0f, bottom = rect.getHeight() - 89.0f;
@@ -286,9 +289,9 @@ void MatterView::paint (juce::Graphics& g)
     g.drawEllipse (cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, 1.0f);
     g.drawLine (cx - 5.0f, cy, cx + 5.0f, cy, 1.0f);
     g.drawLine (cx, cy - 5.0f, cx, cy + 5.0f, 1.0f);
-    title (g, "DRAG TO SHAPE SOUND  /  X: " +
-               juce::String (ui::controls[static_cast<size_t> (id)][2]) +
-               "  /  Y: " + ui::controls[static_cast<size_t> (id)][7],
+    title (g, ui::word (french, "GLISSER POUR FAÇONNER LE SON / X : ",
+                                   "DRAG TO SHAPE SOUND / X: ") +
+               ui::property (id, 2, french) + "  /  Y : " + ui::property (id, 7, french),
            whole.withTrimmedBottom (82).withTrimmedTop (whole.getHeight() - 119),
            9.0f, ui::subdued, false, juce::Justification::centred);
 
@@ -300,7 +303,9 @@ void MatterView::paint (juce::Graphics& g)
     const auto outPeak = toDb (audio.outputPeak.load (std::memory_order_relaxed));
     const int colW = juce::jmax (80, (getWidth() - 40) / 3);
     const juce::String metric[] = {
-        "INPUT RMS", "OUTPUT RMS", "PEAK OUT"
+        ui::word (french, "ENTRÉE RMS", "INPUT RMS"),
+        ui::word (french, "SORTIE RMS", "OUTPUT RMS"),
+        ui::word (french, "CRÊTE SORTIE", "PEAK OUT")
     };
     const float vals[] = { input, output, outPeak };
     for (int i = 0; i < 3; ++i)
