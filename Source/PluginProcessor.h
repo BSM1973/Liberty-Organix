@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "MaterialDSP.h"
 #include "FactoryPresets.h"
+#include "OrganixMovement.h"
 #include <atomic>
 
 class OrganixAudioProcessor final : public juce::AudioProcessor
@@ -41,8 +42,11 @@ public:
 private:
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
-    juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth;
+    juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
     float lastMeterLevel = 0.0f;
+    float movementPhase = 0.0f;
+    float movementHeld = 0.0f;
+    std::uint32_t movementRandom = 0x12ac57efu;
     static float raw (juce::AudioProcessorValueTreeState& state, const char* id) noexcept;
     void setParameter (const char* id, float plainValue);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OrganixAudioProcessor)

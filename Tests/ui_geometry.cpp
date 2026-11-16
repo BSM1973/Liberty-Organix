@@ -43,7 +43,34 @@ static bool accepts (int width, int height)
         routing.intersects (layerB) || routing.intersects (fusionDials)) return false;
     if (fusionDials.h < 70) return false;
 
-    // Brand and preset toolbar (including French/English menu) must not collide.
+    // Missing reference-panel controls: FREE/SYNC, trajectory, division and
+    // three Output knobs including actual M/S width, at every supported size.
+    const int choiceWidth = std::clamp (
+        static_cast<int> (std::lround (g.movement.w * 0.45)), 140, 170);
+    const int choiceX = g.movement.right() - choiceWidth - 12;
+    const Rect freeSwitch { g.movement.right() - 87, g.movement.y + 10, 74, 25 };
+    const Rect trajectoryLabel { choiceX, g.movement.y + 42, choiceWidth, 17 };
+    const Rect trajectoryMenu { choiceX, g.movement.y + 61, choiceWidth, 29 };
+    const Rect divisionLabel { choiceX, g.movement.y + 98, choiceWidth, 16 };
+    const Rect divisionMenu { choiceX, g.movement.y + 116, choiceWidth, 29 };
+    const int leftKnobWidth = (choiceX - (g.movement.x + 10) - 4) / 2;
+    const Rect leftKnobs { g.movement.x + 10, g.movement.y + 57,
+                           2 * leftKnobWidth, g.movement.h - 62 };
+    if (! freeSwitch.valid() || ! trajectoryLabel.valid() ||
+        ! trajectoryMenu.valid() || ! divisionLabel.valid() ||
+        ! divisionMenu.valid() || ! leftKnobs.valid()) return false;
+    for (const auto& r : {freeSwitch, trajectoryLabel, trajectoryMenu,
+                          divisionLabel, divisionMenu, leftKnobs})
+        if (r.x < g.movement.x || r.right() > g.movement.right() ||
+            r.y < g.movement.y || r.bottom() > g.movement.bottom()) return false;
+    if (leftKnobWidth < 64 || leftKnobs.intersects (trajectoryMenu) ||
+        leftKnobs.intersects (divisionMenu) ||
+        trajectoryMenu.intersects (divisionMenu)) return false;
+    const int outputKnobWidth = (g.output.w - 24) / 3;
+    if (outputKnobWidth < 100 ||
+        3 * outputKnobWidth > g.output.w - 24) return false;
+
+    // Brand and preset toolbar (including plain FR/EN buttons) must not collide.
     const int actionSpan = 86 + 120 + 127 + 8;
     const int toolbarWidth = std::min (485, g.header.w - actionSpan - 315);
     const int toolbarLeft = g.header.right() - actionSpan - toolbarWidth;

@@ -47,24 +47,28 @@ public:
 
 private:
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
 
     struct Dial
     {
         juce::Slider slider;
         juce::Label label, value;
         bool percent = true;
+        int unitMode = 0; // 0 percent, 1 dB, 2 Hz, 3 stereo width percent
         std::unique_ptr<SliderAttachment> attachment;
     };
 
     void timerCallback() override;
     void setupDial (Dial&, const juce::String& id, const juce::String& title,
-                    juce::Colour colour, bool percent = true);
+                    juce::Colour colour, bool percent = true, int unitMode = -1);
     void bindProperties();
     void selectLayer (int next);
     void selectMaterial (int materialIndex);
     void updateMaterialState();
     void refreshPreset();
     void changeLanguage (bool french);
+    void populateMovementChoices();
+    void refreshMovementState();
     void openBrowser();
     void setAudioToggle (const char* parameterId, bool enabled);
     void layoutDial (Dial& dial, juce::Rectangle<int> area);
@@ -85,7 +89,11 @@ private:
     std::unique_ptr<juce::PropertiesFile> uiSettings;
     std::unique_ptr<OrganixPresetBrowser> browser;
 
-    juce::ComboBox language;
+    juce::TextButton languageFR { "FR" }, languageEN { "EN" };
+    juce::ComboBox trajectorySelect, divisionSelect;
+    juce::Label trajectoryLabel, divisionLabel;
+    juce::TextButton motionFreeButton { "LIBRE" };
+    std::unique_ptr<ComboAttachment> trajectoryAttachment, divisionAttachment;
     juce::TextButton presetDisplay { "PRESET" }, browserButton { "BROWSER" };
     juce::TextButton previous { "<" }, next { ">" };
     OrganixRoutingSelector routeSelector;
@@ -94,7 +102,7 @@ private:
     juce::TextButton enableB { "B ON" };
     std::array<organix::ui::MaterialButton, 6> materialButtons;
     std::array<Dial, 12> properties;
-    std::array<Dial, 7> bottom;
+    std::array<Dial, 8> bottom;
     std::array<Dial, 8> macros;
 
     juce::Rectangle<int> headerBounds, leftBounds, centerBounds, rightBounds;

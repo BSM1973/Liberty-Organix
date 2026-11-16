@@ -34,6 +34,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("input", "Input Gain dB", -24.0f, 24.0f, 0.0f);
     add ("output", "Output Gain dB", -24.0f, 12.0f, 0.0f);
     add ("drywet", "Dry Wet", 0.0f, 1.0f, 0.65f);
+    // Four real controls absent from the earlier reference UI.
+    add ("width", "Stereo Width", 0.0f, 2.0f, 1.0f);
+    layout.add (std::make_unique<Bool> (pid ("motionFree"), "Motion Free Running", true));
+    add ("motionRate", "Motion Rate Hz", 0.05f, 12.0f, 0.25f);
+    layout.add (std::make_unique<Choice> (
+        pid ("motionTrajectory"), "Movement Trajectory",
+        juce::StringArray {"MANUAL", "SINE", "TRIANGLE", "PULSE", "RANDOM HOLD"}, 0));
+    layout.add (std::make_unique<Choice> (
+        pid ("motionDivision"), "Motion Beat Division",
+        juce::StringArray {"1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T"}, 2));
     add ("aAmount", "Material A Amount", 0.0f, 1.0f, 0.55f);
     add ("aMotion", "Material A Motion", 0.0f, 1.0f, 0.45f);
     add ("aTone", "Material A Tone", 0.0f, 1.0f, 0.50f);
@@ -73,9 +83,14 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     wetSmooth.reset (sampleRate, 0.025);
     bypassSmooth.reset (sampleRate, 0.008);
     outputSmooth.reset (sampleRate, 0.025);
+    widthSmooth.reset (sampleRate, 0.020);
+    movementPhase = 0.0f;
+    movementHeld = 0.0f;
+    movementRandom = 0x12ac57efu;
     wetSmooth.setCurrentAndTargetValue (raw (parameters, "drywet"));
     bypassSmooth.setCurrentAndTargetValue (raw (parameters, "bypass") > 0.5f ? 0.0f : 1.0f);
     outputSmooth.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (raw (parameters, "output")));
+    widthSmooth.setCurrentAndTargetValue (raw (parameters, "width"));
     setLatencySamples (0); // Current time-domain engines require no fixed algorithmic delay.
 }
 
@@ -150,19 +165,52 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     wetSmooth.setTargetValue (raw (parameters, "drywet"));
     bypassSmooth.setTargetValue (raw (parameters, "bypass") > 0.5f ? 0.0f : 1.0f);
     outputSmooth.setTargetValue (juce::Decibels::decibelsToGain (raw (parameters, "output")));
+    widthSmooth.setTargetValue (raw (parameters, "width"));
+
+    // Sample-accurate, host-tempo-aware movement. Read host tempo once per block.
+    const bool freeMotion = raw (parameters, "motionFree") > 0.5f;
+    double hostBpm = 120.0;
+    if (! freeMotion)
+        if (auto* playHead = getPlayHead())
+            if (const auto position = playHead->getPosition())
+                if (const auto bpm = position->getBpm())
+                    hostBpm = *bpm;
+    const int division = juce::jlimit (0, 6, static_cast<int> (raw (parameters, "motionDivision")));
+    const int trajectory = juce::jlimit (0, 4, static_cast<int> (raw (parameters, "motionTrajectory")));
+    const float frequency = organix::Movement::frequency (
+        freeMotion, raw (parameters, "motionRate"), hostBpm, division);
+    const float phaseIncrement = frequency / static_cast<float> (juce::jmax (1.0, getSampleRate()));
+    const float movementAmount = raw (parameters, "macroMotion");
     auto* left = buffer.getWritePointer (0);
     auto* right = channels == 2 ? buffer.getWritePointer (1) : nullptr;
     double inputSquare = 0.0, outputSquare = 0.0;
     float peak = 0.0f;
+
     for (int i = 0; i < n; ++i)
     {
-        const float wet = wetSmooth.getNextValue();
+        const float modulation = organix::Movement::wave (trajectory, movementPhase, movementHeld);
+        const float wet = organix::Movement::scaleWet (
+            wetSmooth.getNextValue(), movementAmount, modulation);
+        movementPhase += phaseIncrement;
+        if (movementPhase >= 1.0f)
+        {
+            movementPhase -= std::floor (movementPhase);
+            movementRandom = movementRandom * 1664525u + 1013904223u;
+            movementHeld = static_cast<float> ((movementRandom >> 8) & 0xffffu)
+                           / 32767.5f - 1.0f;
+        }
+
         const float active = bypassSmooth.getNextValue();
         const float gain = outputSmooth.getNextValue();
+        const float width = widthSmooth.getNextValue();
+        float originals[2] = {0.0f, 0.0f};
+        float inputs[2] = {0.0f, 0.0f};
+        float processed[2] = {0.0f, 0.0f};
+
         for (int ch = 0; ch < channels; ++ch)
         {
-            auto& destination = ch == 0 ? left[i] : right[i];
-            const float original = std::isfinite (destination) ? destination : 0.0f;
+            const float sample = ch == 0 ? left[i] : right[i];
+            const float original = std::isfinite (sample) ? sample : 0.0f;
             const float x = original * inputGain;
             float y = x;
             if (! activeB)
@@ -176,16 +224,29 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 const float xa = engineA.process (ch, x);
                 const float xb = engineB.process (ch, x);
                 y = (1.0f - balance) * xa + balance * xb;
-                // Cross-Fusion adds nonlinear interaction, not only a crossfade.
                 if (routing == 3)
                     y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
             }
-            const float mixed = (x * (1.0f - wet) + y * wet) * gain;
-            // Bounded output safety for experimental sounds (soft-knee tanh ceiling).
-            const float out = std::abs (mixed) < 0.96f ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
-            const float safeEffect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
-            destination = original * (1.0f - active) + safeEffect * active;
+            originals[ch] = original;
+            inputs[ch] = x;
+            processed[ch] = std::isfinite (y) ? y : 0.0f;
             inputSquare += static_cast<double> (x) * x;
+        }
+
+        // M/S width is applied only to the processed signal; dry and bypass
+        // remain unchanged. Width 100% is the mathematically transparent default.
+        if (channels == 2)
+            organix::StereoWidth::process (processed[0], processed[1], width);
+
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            const float mixed = (inputs[ch] * (1.0f - wet) + processed[ch] * wet) * gain;
+            const float out = std::abs (mixed) < 0.96f
+                ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
+            const float effect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
+            const float destination = originals[ch] * (1.0f - active) + effect * active;
+            if (ch == 0) left[i] = destination;
+            else right[i] = destination;
             outputSquare += static_cast<double> (destination) * destination;
             peak = std::max (peak, std::abs (destination));
         }
@@ -234,6 +295,11 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("balance", 0.32f + 0.33f * t);
     setParameter ("fusion", aggressive ? 0.65f : subtle ? 0.10f : 0.25f);
     setParameter ("drywet", subtle ? 0.30f : aggressive ? 0.80f : ambient ? 0.88f : 0.64f);
+    setParameter ("width", 1.0f);
+    setParameter ("motionFree", 1.0f);
+    setParameter ("motionRate", 0.25f);
+    setParameter ("motionTrajectory", 0.0f);
+    setParameter ("motionDivision", 2.0f);
     setParameter ("input", 0.0f);
     setParameter ("output", aggressive ? -4.0f : -1.5f);
     setParameter ("bypass", 0.0f);

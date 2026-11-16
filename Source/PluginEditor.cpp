@@ -328,17 +328,21 @@ void OrganixAudioProcessorEditor::drawText (juce::Graphics& g, const juce::Strin
 }
 void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
                                                 const juce::String& label, juce::Colour accent,
-                                                bool percent)
+                                                bool percent, int unitMode)
 {
     dial.percent = percent;
+    dial.unitMode = unitMode >= 0 ? unitMode : (percent ? 0 : 1);
     dial.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     dial.slider.setRotaryParameters (pi * 1.25f, pi * 2.75f, true);
     dial.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    dial.slider.setDoubleClickReturnValue (true, percent ? 0.5 : 0.0);
+    const double resetValue = dial.unitMode == 3 ? 1.0
+                            : dial.unitMode == 2 ? 0.25
+                            : dial.unitMode == 0 ? 0.5 : 0.0;
+    dial.slider.setDoubleClickReturnValue (true, resetValue);
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
-    dial.slider.setTooltip (label + " — drag to adjust, double-click to reset");
+    dial.slider.setTooltip (label + " - drag to adjust; double-click to reset");
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
@@ -351,24 +355,28 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.value.setColour (juce::Label::textColourId, accent);
     dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
     dial.value.setEditable (true, true, false);
-    dial.value.setTooltip ("Click to type an exact value");
+    dial.value.setTooltip ("Click to enter an exact value");
     dial.value.onTextChange = [&dial]
     {
         double value = dial.value.getText().getDoubleValue();
-        if (dial.percent) value /= 100.0;
+        if (dial.unitMode == 0 || dial.unitMode == 3) value /= 100.0;
         dial.slider.setValue (juce::jlimit (dial.slider.getMinimum(),
                                           dial.slider.getMaximum(), value),
                               juce::sendNotificationSync);
     };
     dial.slider.onValueChange = [&dial]
     {
-        const auto value = dial.slider.getValue();
-        const auto text = dial.percent
-            ? juce::String (juce::roundToInt (value * 100.0)) + "%"
-            : juce::String (value, 1) + " dB";
+        const double value = dial.slider.getValue();
+        juce::String text;
+        switch (dial.unitMode)
+        {
+            case 0:
+            case 3: text = juce::String (juce::roundToInt (value * 100.0)) + "%"; break;
+            case 2: text = juce::String (value, 2) + " Hz"; break;
+            default: text = juce::String (value, 1) + " dB"; break;
+        }
         dial.value.setText (text, juce::dontSendNotification);
     };
-
     addAndMakeVisible (dial.slider);
     addAndMakeVisible (dial.label);
     addAndMakeVisible (dial.value);
@@ -415,11 +423,11 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
-        dial.slider.setTooltip (dial.label.getText() + " — " +
+        dial.slider.setTooltip (dial.label.getText() + "  -  " +
                 ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
                                   selectedLayer == 0 ? "Layer A" : "Layer B") +
-                ui::word (french, " · automatisable, double-clic : réinitialiser",
-                                  " · automatable, double-click: reset"));
+                ui::word (french, "  /  automatisable, double-clic : réinitialiser",
+                                  "  /  automatable, double-click: reset"));
         dial.slider.onValueChange();
     }
 }
@@ -514,19 +522,26 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     visualizer.setFrench (french);
     routeSelector.setFrench (french);
     if (browser != nullptr) browser->setFrench (french);
-    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    languageFR.setColour (juce::TextButton::buttonColourId, french ? ui::inset.brighter (0.22f) : ui::surface);
+    languageEN.setColour (juce::TextButton::buttonColourId, french ? ui::surface : ui::inset.brighter (0.22f));
+    languageFR.setColour (juce::TextButton::textColourOffId, french ? ui::accentFor (0) : ui::secondary);
+    languageEN.setColour (juce::TextButton::textColourOffId, french ? ui::secondary : ui::accentFor (0));
+    populateMovementChoices();
+    refreshMovementState();
     browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
     macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
                                        : ui::word (french, "MACROS", "MACROS"));
     tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
     tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
     constexpr const char* frBottom[] = {
-        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "ÉVOLUTION", "ENTRÉE", "SORTIE"
+        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "VITESSE",
+        "ENTRÉE", "LARGEUR", "SORTIE"
     };
     constexpr const char* enBottom[] = {
-        "FUSION", "BALANCE", "DRY / WET", "MOTION", "EVOLUTION", "INPUT", "OUTPUT"
+        "FUSION", "BALANCE", "DRY / WET", "MOTION", "RATE",
+        "INPUT", "WIDTH", "OUTPUT"
     };
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
         bottom[static_cast<size_t> (i)].label.setText (
             juce::String::fromUTF8 (french ? frBottom[i] : enBottom[i]), juce::dontSendNotification);
     constexpr const char* frMacros[] = {
@@ -544,6 +559,40 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     bindProperties();
     updateMaterialState();
     repaint();
+}
+
+void OrganixAudioProcessorEditor::populateMovementChoices()
+{
+    const int lastTrajectory = trajectorySelect.getSelectedId();
+    const int lastDivision = divisionSelect.getSelectedId();
+    trajectorySelect.clear (juce::dontSendNotification);
+    constexpr const char* frenchModes[] = {"MANUEL", "SINUS", "TRIANGLE", "IMPULSION", "ALEATOIRE"};
+    constexpr const char* englishModes[] = {"MANUAL", "SINE", "TRIANGLE", "PULSE", "RANDOM HOLD"};
+    for (int i = 0; i < 5; ++i)
+        trajectorySelect.addItem (french ? frenchModes[i] : englishModes[i], i + 1);
+    divisionSelect.clear (juce::dontSendNotification);
+    constexpr const char* beatValues[] = { "1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T" };
+    for (int i = 0; i < 7; ++i) divisionSelect.addItem (beatValues[i], i + 1);
+    trajectorySelect.setSelectedId (lastTrajectory > 0 ? lastTrajectory : 1, juce::dontSendNotification);
+    divisionSelect.setSelectedId (lastDivision > 0 ? lastDivision : 3, juce::dontSendNotification);
+    trajectoryLabel.setText (ui::word (french, "TRAJECTOIRE", "TRAJECTORY"), juce::dontSendNotification);
+    divisionLabel.setText (ui::word (french, "DIVISION RYTHMIQUE", "BEAT DIVISION"), juce::dontSendNotification);
+}
+void OrganixAudioProcessorEditor::refreshMovementState()
+{
+    const bool isFree = vParam (audio, "motionFree") > 0.5f;
+    motionFreeButton.setButtonText (isFree ? ui::word (french, "LIBRE", "FREE") : "SYNC");
+    motionFreeButton.setColour (juce::TextButton::buttonColourId,
+                                isFree ? ui::inset : juce::Colour (0xff193d4c));
+    motionFreeButton.setColour (juce::TextButton::textColourOffId,
+                                isFree ? ui::secondary : ui::accentFor (0));
+    // The division still reflects its stored value while FREE is active,
+    // but visibly disables until host-tempo mode is selected.
+    divisionSelect.setEnabled (! isFree);
+    divisionLabel.setColour (juce::Label::textColourId, isFree ? ui::subdued : ui::secondary);
+    bottom[4].slider.setEnabled (isFree);
+    bottom[4].label.setColour (juce::Label::textColourId, isFree ? ui::secondary : ui::subdued);
+    bottom[4].value.setColour (juce::Label::textColourId, isFree ? ui::accentFor (3) : ui::subdued);
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
@@ -588,15 +637,40 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     browserButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff15373e));
     browserButton.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
-    language.addItem ("FR · Français", 1);
-    language.addItem ("EN · English", 2);
-    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
-    language.onChange = [this] { changeLanguage (language.getSelectedId() != 2); };
-    addAndMakeVisible (language);
-    language.setColour (juce::ComboBox::backgroundColourId, ui::inset);
-    language.setColour (juce::ComboBox::textColourId, ui::text);
-    language.setColour (juce::ComboBox::outlineColourId, ui::border);
-    language.setTooltip ("Français / English");
+    // No middle dots, emoji, arrows or font-dependent glyphs: FR and EN are
+    // painted by native JUCE text buttons using universal Latin letters.
+    languageFR.onClick = [this] { changeLanguage (true); };
+    languageEN.onClick = [this] { changeLanguage (false); };
+    languageFR.setTooltip ("Francais");
+    languageEN.setTooltip ("English");
+    addAndMakeVisible (languageFR);
+    addAndMakeVisible (languageEN);
+
+    for (auto* combo : { &trajectorySelect, &divisionSelect })
+    {
+        combo->setColour (juce::ComboBox::backgroundColourId, ui::inset);
+        combo->setColour (juce::ComboBox::textColourId, ui::text);
+        combo->setColour (juce::ComboBox::outlineColourId, ui::border);
+        addAndMakeVisible (*combo);
+    }
+    for (auto* label : { &trajectoryLabel, &divisionLabel })
+    {
+        label->setFont (juce::Font (juce::FontOptions (10.0f)));
+        label->setJustificationType (juce::Justification::centredLeft);
+        label->setColour (juce::Label::textColourId, ui::secondary);
+        addAndMakeVisible (*label);
+    }
+    trajectoryAttachment = std::make_unique<ComboAttachment> (
+        audio.parameters, "motionTrajectory", trajectorySelect);
+    divisionAttachment = std::make_unique<ComboAttachment> (
+        audio.parameters, "motionDivision", divisionSelect);
+    motionFreeButton.onClick = [this]
+    {
+        setAudioToggle ("motionFree", vParam (audio, "motionFree") < 0.5f);
+        refreshMovementState();
+    };
+    addAndMakeVisible (motionFreeButton);
+    populateMovementChoices();
 
     addAndMakeVisible (routeSelector);
     browser = std::make_unique<OrganixPresetBrowser> (audio, *uiSettings);
@@ -637,12 +711,16 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         setupDial (properties[static_cast<size_t> (i)], {}, ui::controls[0][static_cast<size_t> (i)], ui::accentFor (0));
 
     constexpr const char* bottomIds[] = { "fusion", "balance", "drywet",
-                                          "macroMotion", "macroEvolution", "input", "output" };
+                                          "macroMotion", "motionRate", "input", "width", "output" };
     constexpr const char* bottomNames[] = { "FUSION", "BALANCE", "DRY / WET",
-                                            "MOTION", "EVOLUTION", "INPUT", "OUTPUT" };
-    for (int i = 0; i < 7; ++i)
+                                            "MOTION", "RATE", "INPUT", "WIDTH", "OUTPUT" };
+    for (int i = 0; i < 8; ++i)
+    {
+        const int unit = i == 4 ? 2 : i == 5 || i == 7 ? 1 : i == 6 ? 3 : 0;
         setupDial (bottom[static_cast<size_t> (i)], bottomIds[i], bottomNames[i],
-                   i < 3 ? ui::accentFor (1) : i < 5 ? ui::accentFor (3) : ui::accentFor (0), i < 5);
+                   i < 3 ? ui::accentFor (1) : i < 5 ? ui::accentFor (3) : ui::accentFor (0),
+                   unit == 0 || unit == 3, unit);
+    }
     constexpr const char* macroIds[] = { "macroTransform", "macroMotion", "macroEnergy", "macroDensity",
                                          "macroSpace", "macroHarmonics", "macroEvolution", "macroFusion" };
     constexpr const char* macroNames[] = { "TRANSFORM", "MOTION", "ENERGY", "DENSITY",
@@ -665,6 +743,8 @@ OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
     for (auto& dial : properties) dial.attachment.reset();
     for (auto& dial : macros) dial.attachment.reset();
     for (auto& dial : bottom) dial.attachment.reset();
+    trajectoryAttachment.reset();
+    divisionAttachment.reset();
     if (browser != nullptr) browser.reset();
     if (uiSettings != nullptr) uiSettings->saveIfNeeded();
     setLookAndFeel (nullptr);
@@ -689,7 +769,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                     static_cast<float> (headerBounds.getY() + 45 + i * 7),
                     static_cast<float> (headerBounds.getX() + 43),
                     static_cast<float> (headerBounds.getY() + 45 + i * 7), 1.1f);
-    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D’USINE + PRESETS PERSONNELS",
+    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D'USINE + PRESETS PERSONNELS",
                                 "LIBRARY  /  100 FACTORY + USER PRESETS"),
            { presetDisplay.getX(), presetDisplay.getBottom() + 3,
              presetDisplay.getWidth() + browserButton.getWidth(), 17 },
@@ -788,7 +868,14 @@ void OrganixAudioProcessorEditor::resized()
     auto headActions = headerBounds;
     macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
-    language.setBounds (headActions.removeFromRight (127).reduced (8, 25));
+    auto languageArea = headActions.removeFromRight (127).reduced (8, 25);
+    const int langHalf = languageArea.getWidth() / 2;
+    languageFR.setBounds (languageArea.getX(), languageArea.getY(),
+                          langHalf - 2, languageArea.getHeight());
+    languageEN.setBounds (languageArea.getX() + langHalf + 2,
+                          languageArea.getY(),
+                          languageArea.getWidth() - langHalf - 2,
+                          languageArea.getHeight());
     headActions.removeFromRight (8);
     // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
     auto controlsRect = headActions.removeFromRight (juce::jmin (485, headActions.getWidth() - 315));
@@ -839,6 +926,12 @@ void OrganixAudioProcessorEditor::resized()
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
         routeSelector.setVisible (false);
+        for (auto* c : { static_cast<juce::Component*> (&motionFreeButton),
+                         static_cast<juce::Component*> (&trajectorySelect),
+                         static_cast<juce::Component*> (&divisionSelect),
+                         static_cast<juce::Component*> (&trajectoryLabel),
+                         static_cast<juce::Component*> (&divisionLabel) })
+            c->setVisible (false);
     }
     else
     {
@@ -848,19 +941,57 @@ void OrganixAudioProcessorEditor::resized()
         }
         // All three panel bounds come from the shared, unit-tested geometry model.
         routeSelector.setVisible (true);
-        routeSelector.setBounds (footerFusion.getRight() - 252, footerFusion.getY() + 8, 240, 63);
-        for (int i = 0; i < 7; ++i)
+        routeSelector.setBounds (footerFusion.getRight() - 252,
+                                 footerFusion.getY() + 8, 240, 63);
+        for (auto* c : { static_cast<juce::Component*> (&motionFreeButton),
+                         static_cast<juce::Component*> (&trajectorySelect),
+                         static_cast<juce::Component*> (&divisionSelect),
+                         static_cast<juce::Component*> (&trajectoryLabel),
+                         static_cast<juce::Component*> (&divisionLabel) })
+            c->setVisible (true);
+
+        const int movementChoiceWidth = juce::jlimit (
+            140, 170, juce::roundToInt (footerMotion.getWidth() * 0.45f));
+        const int movementChoiceX = footerMotion.getRight() - movementChoiceWidth - 12;
+        motionFreeButton.setBounds (footerMotion.getRight() - 87,
+                                    footerMotion.getY() + 10, 74, 25);
+        trajectoryLabel.setBounds (movementChoiceX, footerMotion.getY() + 42,
+                                   movementChoiceWidth, 17);
+        trajectorySelect.setBounds (movementChoiceX, footerMotion.getY() + 61,
+                                    movementChoiceWidth, 29);
+        divisionLabel.setBounds (movementChoiceX, footerMotion.getY() + 98,
+                                 movementChoiceWidth, 16);
+        divisionSelect.setBounds (movementChoiceX, footerMotion.getY() + 116,
+                                  movementChoiceWidth, 29);
+
+        for (int i = 0; i < 8; ++i)
         {
             auto& d = bottom[static_cast<size_t> (i)];
             d.slider.setVisible (true);
             d.label.setVisible (true);
-            const auto region = i < 3 ? footerFusion : i < 5 ? footerMotion : footerOutput;
-            const int count = i < 3 ? 3 : 2;
-            const int offset = i < 3 ? i : i < 5 ? i - 3 : i - 5;
-            const int cellW = (region.getWidth() - 24) / count;
-            const int top = i < 3 ? 76 : 57;
-            layoutDial (d, { region.getX() + 12 + offset * cellW,
-                             region.getY() + top, cellW, region.getHeight() - top - 5 });
+            d.value.setVisible (true);
+            if (i < 3)
+            {
+                const int cellW = (footerFusion.getWidth() - 24) / 3;
+                layoutDial (d, { footerFusion.getX() + 12 + i * cellW,
+                                 footerFusion.getY() + 76,
+                                 cellW, footerFusion.getHeight() - 81 });
+            }
+            else if (i < 5)
+            {
+                const int left = footerMotion.getX() + 10;
+                const int cellW = (movementChoiceX - left - 4) / 2;
+                layoutDial (d, { left + (i - 3) * cellW,
+                                 footerMotion.getY() + 57,
+                                 cellW, footerMotion.getHeight() - 62 });
+            }
+            else
+            {
+                const int cellW = (footerOutput.getWidth() - 24) / 3;
+                layoutDial (d, { footerOutput.getX() + 12 + (i - 5) * cellW,
+                                 footerOutput.getY() + 57,
+                                 cellW, footerOutput.getHeight() - 62 });
+            }
         }
     }
     if (browser != nullptr) browser->setBounds (getLocalBounds());
@@ -869,6 +1000,7 @@ void OrganixAudioProcessorEditor::timerCallback()
 {
     refreshPreset();
     routeSelector.refresh();
+    refreshMovementState();
     const int a = activeMaterial (0), b = activeMaterial (1);
     const int signature = a + 6 * b + 36 * selectedLayer +
                           (vParam (audio, "enableB") > 0.5f ? 72 : 0) +

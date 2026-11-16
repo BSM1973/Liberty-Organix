@@ -100,19 +100,19 @@ void OrganixPresetBrowser::setFrench (bool value)
     material.setSelectedId (rememberedMaterial > 0 ? rememberedMaterial : 1, juce::dontSendNotification);
     origin.clear (juce::dontSendNotification);
     origin.addItem (ui::word (french, "Toute la bibliothèque", "Entire library"), 1);
-    origin.addItem (ui::word (french, "Presets d’usine", "Factory presets"), 2);
+    origin.addItem (ui::word (french, "Presets d'usine", "Factory presets"), 2);
     origin.addItem (ui::word (french, "Mes presets", "My presets"), 3);
     origin.setSelectedId (rememberedOrigin > 0 ? rememberedOrigin : 1, juce::dontSendNotification);
-    search.setTextToShowWhenEmpty (ui::word (french, "Rechercher un nom, un style, un matériau…",
-                                                      "Search name, category or material…"), ui::subdued);
-    saveName.setTextToShowWhenEmpty (ui::word (french, "Nom de mon preset…", "My preset name…"), ui::subdued);
-    favoriteOnlyButton.setButtonText (ui::word (french, "★ Favoris uniquement", "★ Favorites only"));
-    favoriteButton.setButtonText (ui::word (french, "☆ Favori", "☆ Favorite"));
+    search.setTextToShowWhenEmpty (ui::word (french, "Rechercher un nom, un style, un matériau...",
+                                                      "Search name, category or material..."), ui::subdued);
+    saveName.setTextToShowWhenEmpty (ui::word (french, "Nom de mon preset...", "My preset name..."), ui::subdued);
+    favoriteOnlyButton.setButtonText (ui::word (french, "FAV Favoris uniquement", "FAV Favorites only"));
+    favoriteButton.setButtonText (ui::word (french, "+ Favori", "+ Favorite"));
     loadButton.setButtonText (ui::word (french, "CHARGER", "LOAD"));
     saveButton.setButtonText (ui::word (french, "ENREGISTRER", "SAVE"));
     importButton.setButtonText (ui::word (french, "IMPORTER", "IMPORT"));
     exportButton.setButtonText (ui::word (french, "EXPORTER", "EXPORT"));
-    closeButton.setButtonText (ui::word (french, "FERMER  ×", "CLOSE  ×"));
+    closeButton.setButtonText (ui::word (french, "FERMER  X", "CLOSE  X"));
     refreshLibrary();
 }
 void OrganixPresetBrowser::refreshLibrary()
@@ -142,8 +142,8 @@ void OrganixPresetBrowser::refreshLibrary()
             Entry e;
             e.path = file;
             e.name = file.getFileNameWithoutExtension();
-            e.description = ui::word (french, "Preset personnel — état complet des paramètres",
-                                              "User preset — complete parameter state");
+            e.description = ui::word (french, "Preset personnel  -  état complet des paramètres",
+                                              "User preset  -  complete parameter state");
             e.key = "user:" + file.getFileName();
             library.push_back (std::move (e));
         }
@@ -224,7 +224,7 @@ void OrganixPresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int wid
     }
     g.setColour (isFavorite (e) ? ui::accentFor (5) : ui::subdued);
     g.setFont (juce::Font (juce::FontOptions (14.0f)));
-    g.drawFittedText (isFavorite (e) ? "★" : "☆", { 12, 10, 24, 25 },
+    g.drawFittedText (isFavorite (e) ? "F" : "+", { 12, 10, 24, 25 },
                       juce::Justification::centred, 1);
     const int rightBadge = 130;
     g.setColour (ui::text);
@@ -233,9 +233,9 @@ void OrganixPresetBrowser::paintListBoxItem (int row, juce::Graphics& g, int wid
                       juce::Justification::centredLeft, 1, 0.85f);
     g.setColour (ui::secondary);
     g.setFont (juce::Font (juce::FontOptions (10.5f)));
-    const auto detail = e.isUser() ? ui::word (french, "PERSONNEL · PARAMÈTRES SAUVEGARDÉS",
-                                                     "USER · SAVED PARAMETERS")
-                                   : ui::category (e.category, french) + "  ·  " +
+    const auto detail = e.isUser() ? ui::word (french, "PERSONNEL  /  PARAMÈTRES SAUVEGARDÉS",
+                                                     "USER  /  SAVED PARAMETERS")
+                                   : ui::category (e.category, french) + "   /   " +
                                      ui::materialLabel (e.materialA, french);
     g.drawFittedText (detail, { 45, 25, juce::jmax (100, width - rightBadge - 54), 17 },
                       juce::Justification::centredLeft, 1, 0.85f);
@@ -264,8 +264,8 @@ void OrganixPresetBrowser::updateSelection()
     exportButton.setEnabled (valid && results[static_cast<size_t> (selected)].isUser());
     if (valid)
         favoriteButton.setButtonText (isFavorite (results[static_cast<size_t> (selected)])
-                        ? ui::word (french, "★ Retirer favori", "★ Unfavorite")
-                        : ui::word (french, "☆ Ajouter favori", "☆ Add favorite"));
+                        ? ui::word (french, "FAV Retirer favori", "FAV Unfavorite")
+                        : ui::word (french, "+ Ajouter favori", "+ Add favorite"));
     countLabel.setText (juce::String (results.size()) + " / " + juce::String (library.size()) +
                         ui::word (french, " presets", " presets"), juce::dontSendNotification);
     favoriteOnlyButton.setColour (juce::TextButton::textColourOffId,
@@ -311,7 +311,7 @@ void OrganixPresetBrowser::saveCurrent()
     const auto legal = juce::File::createLegalFileName (raw);
     if (legal.isEmpty() || raw.isEmpty())
     {
-        setMessage (ui::word (french, "Indique un nom avant d’enregistrer.",
+        setMessage (ui::word (french, "Indique un nom avant d'enregistrer.",
                                       "Enter a name before saving."));
         return;
     }
@@ -327,7 +327,7 @@ void OrganixPresetBrowser::saveCurrent()
     audio.getStateInformation (buffer);
     if (buffer.isEmpty())
     {
-        setMessage (ui::word (french, "L’état du plugin est vide.",
+        setMessage (ui::word (french, "L'état du plugin est vide.",
                                       "The plugin state is empty."));
         return;
     }
@@ -416,8 +416,8 @@ void OrganixPresetBrowser::paint (juce::Graphics& g)
                       juce::Justification::centredLeft, 1);
     g.setColour (ui::secondary);
     g.setFont (juce::Font (juce::FontOptions (11.0f)));
-    g.drawFittedText (ui::word (french, "ORGANIX  /  RECHERCHE · COLLECTIONS · FAVORIS · PRESETS PERSONNELS",
-                                         "ORGANIX  /  SEARCH · COLLECTIONS · FAVORITES · USER PRESETS"),
+    g.drawFittedText (ui::word (french, "ORGANIX  /  RECHERCHE  /  COLLECTIONS  /  FAVORIS  /  PRESETS PERSONNELS",
+                                         "ORGANIX  /  SEARCH  /  COLLECTIONS  /  FAVORITES  /  USER PRESETS"),
                       { panelBounds.getX() + 34, panelBounds.getY() + 48, 740, 18 },
                       juce::Justification::centredLeft, 1);
     g.setColour (ui::line);

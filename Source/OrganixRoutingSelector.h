@@ -35,12 +35,12 @@ public:
             const float x = 13.0f, y = bounds.getCentreY();
             g.setColour (c);
             g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
-            const char* schemes[] = {"A+B", "A>B", "B>A", "A×B"};
+            const char* schemes[] = {"A+B", "A>B", "B>A", "AXB"};
             g.drawFittedText (juce::String::fromUTF8 (schemes[mode]),
                               { 5, 2, 38, getHeight() - 4 }, juce::Justification::centred, 1);
             juce::ignoreUnused (x, y);
-            static constexpr const char* french[] = {"PARALLÈLE", "SÉRIE A→B", "SÉRIE B→A", "CROISÉE"};
-            static constexpr const char* english[] = {"PARALLEL", "SERIAL A→B", "SERIAL B→A", "CROSS"};
+            static constexpr const char* french[] = {"PARALLÈLE", "SÉRIE A>B", "SÉRIE B>A", "CROISÉE"};
+            static constexpr const char* english[] = {"PARALLEL", "SERIAL A>B", "SERIAL B>A", "CROSS"};
             g.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::bold)));
             g.drawFittedText (juce::String::fromUTF8 (fr ? french[mode] : english[mode]),
                               { 42, 2, juce::jmax (20, getWidth() - 47), getHeight() - 4 },
