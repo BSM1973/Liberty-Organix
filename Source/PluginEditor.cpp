@@ -530,6 +530,8 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     }
     visualizer.setFrench (french);
     dnaView.setFrench (french);
+    morphPad.setFrench (french);
+    morphControls.setFrench (french);
     routeSelector.setFrench (french);
     if (browser != nullptr) browser->setFrench (french);
     languageFR.setColour (juce::TextButton::buttonColourId, french ? ui::inset.brighter (0.22f) : ui::surface);
@@ -543,6 +545,8 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
                                        : juce::String ("MACROS"));
     dnaToggle.setButtonText (dnaPage ? ui::word (french, "PRINCIPAL", "MAIN")
                                    : ui::word (french, "ADN", "DNA"));
+    morphToggle.setButtonText (morphPage ? ui::word (french, "PRINCIPAL", "MAIN")
+                                       : "MORPH");
     tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
     tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
     constexpr const char* frBottom[] = {
@@ -608,12 +612,16 @@ void OrganixAudioProcessorEditor::refreshMovementState()
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p), routeSelector (p)
+    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p), morphPad (p), morphControls (p), routeSelector (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (visualizer);
     addAndMakeVisible (dnaView);
     dnaView.setVisible (false);
+    addAndMakeVisible (morphPad);
+    addAndMakeVisible (morphControls);
+    morphPad.setVisible (false);
+    morphControls.setVisible (false);
 
     for (int i = 0; i < 6; ++i)
     {
@@ -712,6 +720,9 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     {
         macroPage = ! macroPage;
         dnaPage = false;
+        morphPage = false;
+        morphToggle.setButtonText ("MORPH");
+        morphToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
         dnaToggle.setButtonText (ui::word (french, "ADN", "DNA"));
         dnaToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
         macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
@@ -725,6 +736,9 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     {
         dnaPage = ! dnaPage;
         macroPage = false;
+        morphPage = false;
+        morphToggle.setButtonText ("MORPH");
+        morphToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
         macroToggle.setButtonText ("MACROS");
         macroToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
         dnaToggle.setButtonText (dnaPage ? ui::word (french, "PRINCIPAL", "MAIN")
@@ -736,7 +750,25 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         resized();
         repaint();
     };
-    for (auto* c : { &engaged, &tabA, &tabB, &enableB, &macroToggle, &dnaToggle })
+    morphToggle.onClick = [this]
+    {
+        morphPage = ! morphPage;
+        macroPage = false;
+        dnaPage = false;
+        macroToggle.setButtonText ("MACROS");
+        dnaToggle.setButtonText (ui::word (french, "ADN", "DNA"));
+        macroToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
+        dnaToggle.setColour (juce::TextButton::buttonColourId, ui::surface);
+        morphToggle.setButtonText (
+            morphPage ? ui::word (french, "PRINCIPAL", "MAIN") : "MORPH");
+        morphToggle.setColour (juce::TextButton::buttonColourId,
+                               morphPage ? juce::Colour (0xff153c45) : ui::surface);
+        morphToggle.setColour (juce::TextButton::textColourOffId,
+                               morphPage ? ui::accentFor (0) : ui::secondary);
+        resized();
+        repaint();
+    };
+    for (auto* c : { &engaged, &tabA, &tabB, &enableB, &macroToggle, &dnaToggle, &morphToggle })
         addAndMakeVisible (*c);
     dnaToggle.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
@@ -813,7 +845,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                                        static_cast<float> (headerBounds.getBottom() + 2), 1.0f);
     ui::drawPanel (g, leftBounds);
     ui::drawPanel (g, rightBounds);
-    if (macroPage || dnaPage) ui::drawPanel (g, footerAll);
+    if (macroPage || dnaPage || morphPage) ui::drawPanel (g, footerAll);
     else
     {
         ui::drawPanel (g, footerFusion);
@@ -852,7 +884,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
     if (macroPage)
         title (g, ui::word (french, "HUIT MACROS DE PERFORMANCE", "EIGHT PERFORMANCE MACROS"), { footerAll.getX() + 17, footerAll.getY() + 11,
                                                 footerAll.getWidth() - 34, 24 }, 11.0f, ui::secondary, true);
-    else if (! dnaPage)
+    else if (! dnaPage && ! morphPage)
     {
         title (g, ui::word (french, "FUSION A/B", "DUAL FUSION"),
                { footerFusion.getX() + 17, footerFusion.getY() + 10, 137, 19 },
@@ -897,12 +929,18 @@ void OrganixAudioProcessorEditor::resized()
     footerMotion = toJuce (geometry.movement);
     footerOutput = toJuce (geometry.output);
     visualizer.setBounds (centerBounds);
+    visualizer.setVisible (! morphPage);
+    morphPad.setBounds (centerBounds);
+    morphPad.setVisible (morphPage);
     dnaView.setBounds (footerAll);
     dnaView.setVisible (dnaPage);
+    morphControls.setBounds (footerAll);
+    morphControls.setVisible (morphPage);
 
     auto headActions = headerBounds;
     macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     dnaToggle.setBounds (headActions.removeFromRight (82).reduced (4, 25));
+    morphToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
     auto languageArea = headActions.removeFromRight (127).reduced (8, 25);
     const int langHalf = languageArea.getWidth() / 2;
@@ -915,7 +953,7 @@ void OrganixAudioProcessorEditor::resized()
     headActions.removeFromRight (8);
     // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
     auto controlsRect = headActions.removeFromRight (
-        juce::jmin (485, juce::jmax (340, headActions.getWidth() - 366)));
+        juce::jmin (485, juce::jmax (310, headActions.getWidth() - 370)));
     browserButton.setBounds (controlsRect.removeFromRight (111).reduced (3, 25));
     next.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
     previous.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
@@ -946,7 +984,7 @@ void OrganixAudioProcessorEditor::resized()
         }
     }
 
-    if (dnaPage)
+    if (dnaPage || morphPage)
     {
         for (auto& d : macros)
         {
