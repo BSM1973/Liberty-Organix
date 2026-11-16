@@ -39,7 +39,7 @@ def verify_bundle(data: bytes, entry: str, bundle_name: str) -> None:
         with z.open(binary) as fp:
             magic = fp.read(4)
         # Mach-O 64-bit little endian (thin ARM64) or universal fat binary.
-        if magic not in (b"\\xcf\\xfa\\xed\\xfe", b"\\xca\\xfe\\xba\\xbe", b"\\xca\\xfe\\xba\\xbf"):
+        if magic not in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):
             raise ValueError(f"{bundle_name}: binary is not Mach-O")
         print(f"VERIFIED {bundle_name}: {entry} ({binary.file_size} bytes)")
 
@@ -112,9 +112,9 @@ def verify_published() -> None:
             print(f"REMOTE GATE PASS: artifact #{artifact_id} from run #{run} is downloadable, and AU/VST3 are intact")
             with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
                 output.write(
-                    "\\n## BUILD AU/VST3 VALIDÉ ET TÉLÉCHARGEABLE\\n"
-                    f"**[TÉLÉCHARGER ORGANIX AU + VST3](https://github.com/{repo}/actions/runs/{run}/artifacts/{artifact_id})**\\n\\n"
-                    f"Archive : \\u0060{expected_name}\\u0060. Vérification : téléchargement GitHub, deux ZIP intègres et deux binaires macOS présents.\\n"
+                    "\n## BUILD AU/VST3 VALIDÉ ET TÉLÉCHARGEABLE\n"
+                    f"**[TÉLÉCHARGER ORGANIX AU + VST3](https://github.com/{repo}/actions/runs/{run}/artifacts/{artifact_id})**\n\n"
+                    f"Archive : \u0060{expected_name}\u0060. Vérification : téléchargement GitHub, deux ZIP intègres et deux binaires macOS présents.\n"
                 )
             return
         except (ValueError, OSError, urllib.error.URLError, zipfile.BadZipFile) as exc:
