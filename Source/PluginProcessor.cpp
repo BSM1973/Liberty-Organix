@@ -253,6 +253,8 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
         setParameter ((juce::String ("aShape") + suffix).toRawUTF8(), 0.5f);
         setParameter ((juce::String ("bShape") + suffix).toRawUTF8(), 0.5f);
     }
+    // A factory preset clears any displayed user-preset identity in host state.
+    parameters.state.removeProperty ("customPresetName", nullptr);
     currentPreset.store (index);
 }
 
