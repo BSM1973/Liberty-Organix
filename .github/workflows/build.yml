@@ -1,13 +1,23 @@
 name: Organix AU/VST3 — macOS ARM64
 on:
   push:
+    branches: [main]
     paths:
       - 'Source/**'
       - 'Tests/**'
       - 'CMakeLists.txt'
       - '.github/workflows/build.yml'
   pull_request:
+    paths:
+      - 'Source/**'
+      - 'Tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
+
+concurrency:
+  group: organix-macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   macos-arm64:
