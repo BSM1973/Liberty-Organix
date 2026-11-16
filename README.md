@@ -1,5 +1,15 @@
 # Organix — Living Audio Matter
 
+## LIVRAISON OBLIGATOIRE — BUILD VERT = AU + VST3 TÉLÉCHARGEABLE
+
+**Ne pas confondre les tests C++ verts avec un plugin téléchargeable.**
+La CI macOS possède deux contrôles bloquants : les deux archives AU/VST3
+sont testées avant l'upload, puis l'Artifact GitHub est retéléchargé par
+la CI et vérifié jusqu'aux véritables exécutables. **Sans Artifact valide,
+le build doit être rouge.** Le lien est affiché dans le résumé du run.
+Voir [la règle de livraison obligatoire](docs/BUILD-ARTIFACT-REQUIRED.md).
+
+
 ## MATTER DNA — v0.6 (feature branch)
 
 - Genuine low-latency input **FFT spectrum** (1024 points, 256-sample hop), input RMS and transient-following signal analysis.
