@@ -375,7 +375,7 @@ void OrganixAudioProcessorEditor::bindProperties()
         const auto parameterId = juce::String (selectedLayer == 0 ? "aShape" : "bShape") + suffix;
         dial.label.setText (ui::controls[static_cast<size_t> (id)][static_cast<size_t> (i)], juce::dontSendNotification);
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
-        dial.slider.setColour (juce::Slider::textBoxTextColourId, ui::accentFor (id));
+        dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
     }
 }
@@ -385,18 +385,8 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     const int selected = activeMaterial (selectedLayer);
     const bool enabled = vParam (audio, "enableB") > 0.5f;
     for (int i = 0; i < 6; ++i)
-    {
-        auto& button = materialButtons[static_cast<size_t> (i)];
-        const auto accent = ui::accentFor (i);
-        const bool isSelected = i == selected;
-        const auto number = juce::String (i + 1).paddedLeft ('0', 2);
-        juce::String badges;
-        if (i == a) badges += "  A";
-        if (enabled && i == b) badges += "  B";
-        button.setButtonText (number + "   " + ui::name[static_cast<size_t> (i)] + badges);
-        button.setColour (juce::TextButton::buttonColourId, isSelected ? ui::inset : ui::surface);
-        button.setColour (juce::TextButton::textColourOffId, isSelected ? accent : ui::secondary);
-    }
+        materialButtons[static_cast<size_t> (i)].setLayerState (
+            i == selected, i == a, enabled && i == b);
     tabA.setColour (juce::TextButton::buttonColourId, selectedLayer == 0 ? ui::inset : ui::surface);
     tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
     tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
@@ -410,7 +400,7 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     for (auto& dial : properties)
     {
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (selected));
-        dial.slider.setColour (juce::Slider::textBoxTextColourId, ui::accentFor (selected));
+        dial.value.setColour (juce::Label::textColourId, ui::accentFor (selected));
     }
     for (int i = 0; i < 12; ++i)
         properties[static_cast<size_t> (i)].label.setText (
@@ -464,7 +454,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     for (int i = 0; i < 6; ++i)
     {
         auto& button = materialButtons[static_cast<size_t> (i)];
-        button.setColour (juce::TextButton::buttonColourId, ui::surface);
+        button.setMaterial (i);
         button.onClick = [this, i] { selectMaterial (i); };
         addAndMakeVisible (button);
     }
@@ -583,15 +573,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
            { leftBounds.getX() + 14, leftBounds.getY() + 41, leftBounds.getWidth() - 28, 20 },
            10.0f, ui::subdued);
     const int current = activeMaterial (selectedLayer);
-    for (int i = 0; i < 6; ++i)
-    {
-        if (i != current) continue;
-        const auto b = materialButtons[static_cast<size_t> (i)].getBounds();
-        g.setColour (ui::accentFor (i));
-        g.fillRoundedRectangle (juce::Rectangle<float> (static_cast<float> (b.getX()),
-                          static_cast<float> (b.getY() + 8), 3.0f,
-                          static_cast<float> (b.getHeight() - 16)), 1.3f);
-    }
+    // The active material stripe, icon and layer badges are drawn by MaterialButton.
     g.setColour (ui::engaged); g.fillEllipse (static_cast<float> (leftBounds.getX() + 16),
                               static_cast<float> (leftBounds.getBottom() - 37), 4.0f, 4.0f);
     title (g, "SIX LIVE PROCESSORS",
