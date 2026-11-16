@@ -85,6 +85,8 @@ void MatterView::paint (juce::Graphics& g)
     const float energy = juce::jlimit (0.0f, 1.0f, audio.outputRms.load (std::memory_order_relaxed) * 3.8f);
     const float peak = juce::jlimit (0.0f, 1.0f, audio.outputPeak.load (std::memory_order_relaxed));
     const float movement = vParam (audio, layer == 0 ? "aMotion" : "bMotion");
+    const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
+    const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
     clock += 0.012f + movement * 0.018f;
     if (clock > 1000.0f) clock = 0.0f;
 
@@ -107,7 +109,8 @@ void MatterView::paint (juce::Graphics& g)
 
     const float top = 125.0f, bottom = rect.getHeight() - 89.0f;
     const float plotH = juce::jmax (20.0f, bottom - top);
-    const float cx = rect.getCentreX(), cy = top + plotH * 0.5f;
+    const float cx = rect.getCentreX() + (xControl - 0.5f) * rect.getWidth() * 0.13f;
+    const float cy = top + plotH * 0.5f - (yControl - 0.5f) * plotH * 0.16f;
     const float radius = juce::jmin (rect.getWidth() * 0.235f, plotH * 0.33f) * (0.9f + energy * 0.18f);
     const float wobble = 0.045f + 0.13f * energy;
     g.setColour (ui::line.withAlpha (0.8f));
@@ -252,7 +255,9 @@ void MatterView::paint (juce::Graphics& g)
     g.drawEllipse (cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, 1.0f);
     g.drawLine (cx - 5.0f, cy, cx + 5.0f, cy, 1.0f);
     g.drawLine (cx, cy - 5.0f, cx, cy + 5.0f, 1.0f);
-    title (g, "DRAG TO SHAPE SOUND  /  X: CURRENT  /  Y: SURFACE",
+    title (g, "DRAG TO SHAPE SOUND  /  X: " +
+               juce::String (ui::controls[static_cast<size_t> (id)][2]) +
+               "  /  Y: " + ui::controls[static_cast<size_t> (id)][7],
            whole.withTrimmedBottom (82).withTrimmedTop (whole.getHeight() - 119),
            9.0f, ui::subdued, false, juce::Justification::centred);
 
