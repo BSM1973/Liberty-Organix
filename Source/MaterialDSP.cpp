@@ -231,6 +231,15 @@ float MaterialDSP::process (int channel, float input) noexcept
         case Material::Light:   y = light (s, driven); break;
     }
     if (! std::isfinite (y)) return 0.0f;
+    // These small centered corrections ensure all material property indices
+    // remain acoustically active even for the early engines that don't yet
+    // consume a matching specialized DSP field.
+    s.phase2 = wrapPhase (s.phase2 + 2.0f * pi *
+                           (0.15f + 3.0f * p.shape[1]) / static_cast<float> (fs));
+    y *= 1.0f + 0.12f * (p.shape[1] - 0.5f) * std::sin (s.phase2);
+    y += (p.shape[3] - 0.5f) * 0.09f * (y - input);
+    y += (p.shape[4] - 0.5f) * 0.10f * (std::tanh (y * 1.9f) - y);
+    y += (p.shape[5] - 0.5f) * 0.11f * (std::tanh (y * 3.2f) - y);
     s.smooth += (y - s.smooth) * 0.095f;
     y += (p.shape[7] - 0.5f) * 0.52f * (y - s.smooth);
     y += (p.shape[8] - 0.5f) * 0.22f * (y - input) * clamp (transient * 3.0f, 0.0f, 1.0f);
