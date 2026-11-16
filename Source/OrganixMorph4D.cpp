@@ -145,6 +145,7 @@ void MorphRender::prepare (double sampleRate, int channels)
         {
             pair.a.prepare (sampleRate, channels);
             pair.b.prepare (sampleRate, channels);
+            pair.reaction.prepare (sampleRate);
         }
     reset();
 }
@@ -160,6 +161,7 @@ void MorphRender::reset() noexcept
         {
             pair.a.reset();
             pair.b.reset();
+            pair.reaction.reset();
         }
 }
 
@@ -202,8 +204,10 @@ void MorphRender::configureOne (Pair& pair, const MorphScene& scene,
 
 void MorphRender::configure (float x, float y,
                              MatterDNA::Features features,
-                             MatterDNAControls controls) noexcept
+                             MatterDNAControls controls,
+                             ReactionControls reactions) noexcept
 {
+    reactionSettings = reactions;
     blockWeights = Morph4D::weights (x, y);
     continuousBlend = Morph4D::interpolate (target, blockWeights);
     for (int i = 0; i < 4; ++i)
@@ -229,17 +233,16 @@ void MorphRender::configure (float x, float y,
 
 float MorphRender::renderOne (Pair& pair, const MorphScene& scene,
                               const MorphScene& continuous,
-                              int channel, float input) noexcept
+                              int channel, float input,
+                              ReactionControls reactions) noexcept
 {
     if (! scene.enableB) return pair.a.process (channel, input);
-    if (scene.routing == 1) return pair.b.process (channel, pair.a.process (channel, input));
-    if (scene.routing == 2) return pair.a.process (channel, pair.b.process (channel, input));
-    const float a = pair.a.process (channel, input);
-    const float b = pair.b.process (channel, input);
-    float out = (1.0f - continuous.balance) * a + continuous.balance * b;
-    if (scene.routing == 3)
-        out += continuous.fusion * 0.27f * std::tanh (3.0f * a * b);
-    return std::isfinite (out) ? out : 0.0f;
+    return pair.reaction.process (pair.a, pair.b,
+             static_cast<Material> (scene.materialA),
+             static_cast<Material> (scene.materialB),
+             scene.routing, continuous.balance, continuous.fusion,
+             channel, input, reactions);
+
 }
 
 void MorphRender::processFrame (const float in[2], float out[2], int channels,
@@ -262,13 +265,13 @@ void MorphRender::processFrame (const float in[2], float out[2], int channels,
                 engines[k][static_cast<size_t> (active)],
                 transitioning[k] ? previous[k] : target[k],
                 transitioning[k] ? previousContinuous[k] : continuousBlend,
-                ch, in[ch]);
+                ch, in[ch], reactionSettings);
             float sample = oldOutput;
             if (transitioning[k])
             {
                 const float fresh = renderOne (
                     engines[k][static_cast<size_t> (1 - active)], target[k],
-                    continuousBlend, ch, in[ch]);
+                    continuousBlend, ch, in[ch], reactionSettings);
                 sample = oldOutput * (1.0f - t) + fresh * t;
             }
             out[ch] += sample * weight[k];
@@ -294,6 +297,26 @@ float MorphRender::widthAt (const std::array<float,4>& weights) const noexcept
     for (int i = 0; i < 4; ++i)
         value += weights[static_cast<size_t> (i)] * target[static_cast<size_t> (i)].width;
     return std::clamp (value, 0.0f, 2.0f);
+}
+float MorphRender::reactionMeterAB() const noexcept
+{
+    float sum = 0.0f;
+    for (int i = 0; i < 4; ++i)
+        sum += blockWeights[static_cast<size_t> (i)] *
+               engines[static_cast<size_t> (i)]
+                      [static_cast<size_t> (currentBank[static_cast<size_t> (i)])]
+                      .reaction.activityAB();
+    return std::clamp (sum, 0.0f, 1.0f);
+}
+float MorphRender::reactionMeterBA() const noexcept
+{
+    float sum = 0.0f;
+    for (int i = 0; i < 4; ++i)
+        sum += blockWeights[static_cast<size_t> (i)] *
+               engines[static_cast<size_t> (i)]
+                      [static_cast<size_t> (currentBank[static_cast<size_t> (i)])]
+                      .reaction.activityBA();
+    return std::clamp (sum, 0.0f, 1.0f);
 }
 bool MorphRender::hasPendingTransition (int scene) const noexcept
 {

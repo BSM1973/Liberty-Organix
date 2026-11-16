@@ -448,10 +448,16 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     for (int i = 0; i < 6; ++i)
         materialButtons[static_cast<size_t> (i)].setLayerState (
             i == selected, i == a, enabled && i == b);
-    tabA.setColour (juce::TextButton::buttonColourId, selectedLayer == 0 ? ui::inset : ui::surface);
-    tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
-    tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
-    tabB.setColour (juce::TextButton::textColourOffId, selectedLayer == 1 ? ui::accentFor (b) : ui::secondary);
+    const bool tabAActive = ! reactionPage && selectedLayer == 0;
+    const bool tabBActive = ! reactionPage && selectedLayer == 1;
+    tabA.setColour (juce::TextButton::buttonColourId, tabAActive ? ui::inset : ui::surface);
+    tabB.setColour (juce::TextButton::buttonColourId, tabBActive ? ui::inset : ui::surface);
+    tabA.setColour (juce::TextButton::textColourOffId, tabAActive ? ui::accentFor (a) : ui::secondary);
+    tabB.setColour (juce::TextButton::textColourOffId, tabBActive ? ui::accentFor (b) : ui::secondary);
+    reactionToggle.setColour (juce::TextButton::buttonColourId,
+        reactionPage ? juce::Colour (0xff143f46) : ui::surface);
+    reactionToggle.setColour (juce::TextButton::textColourOffId,
+        reactionPage ? ui::accentFor (0) : ui::secondary);
     enableB.setButtonText (enabled ? ui::word (french, "B ACTIF", "B ON")
                                   : ui::word (french, "B INACTIF", "B OFF"));
     enableB.setColour (juce::TextButton::textColourOffId, enabled ? ui::engaged : ui::secondary);
@@ -473,6 +479,11 @@ void OrganixAudioProcessorEditor::updateMaterialState()
 }
 void OrganixAudioProcessorEditor::selectLayer (int index)
 {
+    if (reactionPage)
+    {
+        reactionPage = false;
+        resized();
+    }
     if (selectedLayer != index)
     {
         selectedLayer = juce::jlimit (0, 1, index);
@@ -533,6 +544,7 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     morphPad.setFrench (french);
     morphControls.setFrench (french);
     trajectoryControls.setFrench (french);
+    reactionPanel.setFrench (french);
     routeSelector.setFrench (french);
     if (browser != nullptr) browser->setFrench (french);
     languageFR.setColour (juce::TextButton::buttonColourId, french ? ui::inset.brighter (0.22f) : ui::surface);
@@ -550,6 +562,7 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
                                        : "MORPH");
     tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
     tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
+    reactionToggle.setButtonText (ui::word (french, "RÉACTIONS", "REACTIONS"));
     constexpr const char* frBottom[] = {
         "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "VITESSE",
         "ENTRÉE", "LARGEUR", "SORTIE"
@@ -613,7 +626,9 @@ void OrganixAudioProcessorEditor::refreshMovementState()
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p), morphPad (p), morphControls (p), trajectoryControls (p), routeSelector (p)
+    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p),
+      morphPad (p), morphControls (p), trajectoryControls (p),
+      reactionPanel (p), routeSelector (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (visualizer);
@@ -625,6 +640,8 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     morphControls.setVisible (false);
     addAndMakeVisible (trajectoryControls);
     trajectoryControls.setVisible (false);
+    addAndMakeVisible (reactionPanel);
+    reactionPanel.setVisible (false);
     trajectoryControls.onDrawingToggled = [this] (bool draw)
     {
         morphPad.setDrawingEnabled (draw);
@@ -722,6 +739,16 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     engaged.onClick = [this] { setAudioToggle ("bypass", vParam (audio, "bypass") < 0.5f); };
     tabA.onClick = [this] { selectLayer (0); };
     tabB.onClick = [this] { selectLayer (1); };
+    reactionToggle.onClick = [this]
+    {
+        reactionPage = ! reactionPage;
+        reactionToggle.setColour (juce::TextButton::buttonColourId,
+            reactionPage ? juce::Colour (0xff143f46) : ui::surface);
+        reactionToggle.setColour (juce::TextButton::textColourOffId,
+            reactionPage ? ui::accentFor (0) : ui::secondary);
+        resized();
+        updateMaterialState();
+    };
     enableB.onClick = [this] { setAudioToggle ("enableB", vParam (audio, "enableB") < 0.5f); };
     macroToggle.onClick = [this]
     {
@@ -775,7 +802,8 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         resized();
         repaint();
     };
-    for (auto* c : { &engaged, &tabA, &tabB, &enableB, &macroToggle, &dnaToggle, &morphToggle })
+    for (auto* c : { &engaged, &tabA, &tabB, &reactionToggle,
+                     &enableB, &macroToggle, &dnaToggle, &morphToggle })
         addAndMakeVisible (*c);
     dnaToggle.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
@@ -872,7 +900,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
            { leftBounds.getX() + 27, leftBounds.getBottom() - 43, leftBounds.getWidth() - 35, 20 },
            9.0f, ui::subdued, true);
 
-    if (! morphPage)
+    if (! morphPage && ! reactionPage)
     {
     title (g, ui::word (french, "PROPRIÉTÉS DU MATÉRIAU", "MATERIAL PROPERTIES"), { rightBounds.getX() + 19, rightBounds.getY() + 61,
                                       rightBounds.getWidth() - 38, 18 },
@@ -949,14 +977,18 @@ void OrganixAudioProcessorEditor::resized()
     morphControls.setVisible (morphPage);
     trajectoryControls.setBounds (rightBounds);
     trajectoryControls.setVisible (morphPage);
+    reactionPanel.setBounds (rightBounds.getX() + 10, rightBounds.getY() + 50,
+                             rightBounds.getWidth() - 20, rightBounds.getHeight() - 58);
+    reactionPanel.setVisible (! morphPage && reactionPage);
     tabA.setVisible (! morphPage);
     tabB.setVisible (! morphPage);
-    enableB.setVisible (! morphPage);
+    reactionToggle.setVisible (! morphPage);
+    enableB.setVisible (! morphPage && ! reactionPage);
     for (auto& property : properties)
     {
-        property.slider.setVisible (! morphPage);
-        property.label.setVisible (! morphPage);
-        property.value.setVisible (! morphPage);
+        property.slider.setVisible (! morphPage && ! reactionPage);
+        property.label.setVisible (! morphPage && ! reactionPage);
+        property.value.setVisible (! morphPage && ! reactionPage);
     }
 
     auto headActions = headerBounds;
@@ -990,9 +1022,11 @@ void OrganixAudioProcessorEditor::resized()
             leftPad.getX(), buttonsY + i * (buttonH + 7), leftPad.getWidth(), buttonH);
 
     const int topY = rightBounds.getY() + 12;
-    const int tabW = (rightBounds.getWidth() - 47) / 2;
+    // Three actual tabs in the right panel; never crowd the top toolbar.
+    const int tabW = (rightBounds.getWidth() - 48) / 3;
     tabA.setBounds (rightBounds.getX() + 15, topY, tabW, 32);
-    tabB.setBounds (rightBounds.getX() + 21 + tabW, topY, tabW, 32);
+    tabB.setBounds (rightBounds.getX() + 19 + tabW, topY, tabW, 32);
+    reactionToggle.setBounds (rightBounds.getX() + 23 + 2 * tabW, topY, tabW, 32);
     enableB.setBounds (rightBounds.getRight() - 74, rightBounds.getY() + 62, 57, 20);
 
     auto grid = rightBounds.reduced (15, 8).withTrimmedTop (139).withTrimmedBottom (31);

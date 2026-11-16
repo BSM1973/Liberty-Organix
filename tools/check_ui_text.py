@@ -26,6 +26,8 @@ UI_FILES = [
     "OrganixMorphView.h",
     "OrganixTrajectoryControls.cpp",
     "OrganixTrajectoryControls.h",
+    "OrganixReactionPanel.cpp",
+    "OrganixReactionPanel.h",
 ]
 # These are known to render as missing-glyph boxes or stray symbols on some
 # hosts/fonts. Use ASCII or draw vector icons rather than font characters.

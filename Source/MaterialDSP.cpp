@@ -111,9 +111,10 @@ float MaterialDSP::exciteModes (ChannelState& s, float excitation, bool metallic
     return std::tanh (y * (0.5f + 2.0f * p.amount));
 }
 
-float MaterialDSP::liquid (ChannelState& s, float x) noexcept
+float MaterialDSP::liquid (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
-    const float rate = 0.09f + 2.8f * p.motion;
+    const float rate = (0.09f + 2.8f * p.motion) *
+                       (1.0f - 0.72f * clamp (reaction.slow, 0.0f, 1.0f));
     s.phase = wrapPhase (s.phase + 2.0f * pi * rate / static_cast<float> (fs));
     const float wiggle = 0.5f + 0.5f * sine (s.phase);
     const float offsetMs = 10.0f + 15.0f * p.tone + 18.0f * p.amount * wiggle;
@@ -126,34 +127,44 @@ float MaterialDSP::liquid (ChannelState& s, float x) noexcept
     return x * (1.0f - p.amount * 0.7f) + out * (p.amount * 0.83f);
 }
 
-float MaterialDSP::crystal (ChannelState& s, float x) noexcept
+float MaterialDSP::crystal (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
-    const float excitation = (x - s.lastInput) * (0.5f + 0.8f * p.energy) + x * 0.035f;
+    // Cross-material excitation reaches the Crystal resonator, instead of
+    // merely changing the blend between A and B.
+    const float excitation = (x - s.lastInput) * (0.5f + 0.8f * p.energy) +
+                             x * 0.035f +
+                             clamp (reaction.excite, -1.0f, 1.0f) * 0.38f;
     s.lastInput = x;
     return x * (1.0f - 0.65f * p.amount) + exciteModes (s, excitation, false);
 }
 
-float MaterialDSP::plasma (ChannelState& s, float x) noexcept
+float MaterialDSP::plasma (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
-    const float cutoff = 140.0f + 960.0f * p.tone;
+    const float cutoff = (140.0f + 960.0f * p.tone) *
+                         (1.0f + 0.30f * clamp (reaction.colour, -1.0f, 1.0f));
     const float coeff = 1.0f - std::exp (-2.0f * pi * cutoff / static_cast<float> (fs));
     s.lp += coeff * (x - s.lp);
     const float low = s.lp;
     const float high = x - low;
     const float drive = 1.0f + 18.0f * p.amount * (0.4f + p.energy);
     const float crunchy = (std::tanh (low * drive * 0.6f) + std::tanh (high * drive * 1.25f)) * 0.7f;
-    s.phase = wrapPhase (s.phase + 2.0f * pi * (17.0f + 270.0f * p.motion) / static_cast<float> (fs));
+    // A LIQUID source can slow PLASMA's actual carrier modulation frequency.
+    const float carrier = (17.0f + 270.0f * p.motion) *
+                          (1.0f - 0.80f * clamp (reaction.slow, 0.0f, 1.0f));
+    s.phase = wrapPhase (s.phase + 2.0f * pi * carrier / static_cast<float> (fs));
     const float ring = 1.0f - 0.45f * p.motion + 0.45f * p.motion * sine (s.phase);
     return x * (1.0f - p.amount) + crunchy * ring * p.amount;
 }
 
-float MaterialDSP::vapor (ChannelState& s, float x) noexcept
+float MaterialDSP::vapor (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
     s.delay[static_cast<size_t> (s.write)] = x;
+    const float scatter = clamp (reaction.disperse, 0.0f, 1.0f);
+    const float density = clamp (p.density + scatter * 0.39f, 0.0f, 1.0f);
     const int grainLength = static_cast<int> (fs * (0.045 + p.tone * 0.18));
     if (--s.samplesUntilGrain <= 0)
     {
-        s.samplesUntilGrain = std::max (48, static_cast<int> (fs * (0.065 - 0.055 * p.density)));
+        s.samplesUntilGrain = std::max (48, static_cast<int> (fs * (0.065 - 0.055 * density)));
         for (auto& g : s.grains)
         {
             if (! g.active)
@@ -162,7 +173,8 @@ float MaterialDSP::vapor (ChannelState& s, float x) noexcept
                 g.duration = std::max (64, grainLength);
                 g.age = 0;
                 g.readPos = static_cast<float> (s.write) - static_cast<float> (fs * (0.11 + 0.65 * random01 (s)));
-                g.speed = 0.68f + 0.65f * random01 (s) + 0.15f * p.motion;
+                g.speed = 0.68f + 0.65f * random01 (s) + 0.15f * p.motion +
+                          0.34f * scatter;
                 break;
             }
         }
@@ -185,16 +197,18 @@ float MaterialDSP::vapor (ChannelState& s, float x) noexcept
     return x * (1.0f - p.amount) + (s.lp * 0.55f + cloud * 0.65f) * p.amount;
 }
 
-float MaterialDSP::metal (ChannelState& s, float x) noexcept
+float MaterialDSP::metal (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
     const float transient = std::max (0.0f, std::abs (x) - s.env);
     s.env += (std::abs (x) - s.env) * 0.004f;
-    const float impact = (x - s.lastInput) * (0.35f + p.energy) + transient * (0.35f + p.motion);
+    const float impact = (x - s.lastInput) * (0.35f + p.energy) +
+                         transient * (0.35f + p.motion) +
+                         clamp (reaction.excite, -1.0f, 1.0f) * 0.36f;
     s.lastInput = x;
     return x * (1.0f - p.amount * 0.65f) + exciteModes (s, impact, true);
 }
 
-float MaterialDSP::light (ChannelState& s, float x) noexcept
+float MaterialDSP::light (ChannelState& s, float x, ReactionDrive reaction) noexcept
 {
     // Harmonic exciter and high-frequency movement. FFT/spectral resynthesis is NOT included in v0.1.
     const float cutoff = 650.0f + 4200.0f * p.tone;
@@ -206,12 +220,20 @@ float MaterialDSP::light (ChannelState& s, float x) noexcept
     const float movement = 0.67f + 0.33f * sine (s.phase);
     s.delay[static_cast<size_t> (s.write)] = std::tanh (harmonics + p.feedback * s.feedbackSample);
     const float delayed = readDelay (s, (14.0f + 12.0f * movement) * static_cast<float> (fs) / 1000.0f);
-    s.feedbackSample = delayed;
+    // VAPOR -> LIGHT is a genuine second diffusion tap, blended into the
+    // feedback as well as the audible halo. This keeps the old tap unchanged
+    // when the reaction is disabled.
+    const float spread = clamp (reaction.disperse, 0.0f, 1.0f);
+    const float secondTap = spread > 0.00001f
+        ? readDelay (s, (31.0f + 23.0f * movement) * static_cast<float> (fs) / 1000.0f)
+        : delayed;
+    const float diffused = delayed + (secondTap - delayed) * spread * 0.52f;
+    s.feedbackSample = diffused;
     s.write = s.write + 1 == delayLength ? 0 : s.write + 1;
-    return x + p.amount * movement * (harmonics * 0.45f + delayed * 0.33f);
+    return x + p.amount * movement * (harmonics * 0.45f + diffused * 0.33f);
 }
 
-float MaterialDSP::process (int channel, float input) noexcept
+float MaterialDSP::process (int channel, float input, ReactionDrive reaction) noexcept
 {
     if (channel < 0 || channel >= maxChannels) return input;
     if (! std::isfinite (input)) input = 0.0f;
@@ -223,12 +245,12 @@ float MaterialDSP::process (int channel, float input) noexcept
     float y = driven;
     switch (material)
     {
-        case Material::Liquid:  y = liquid (s, driven); break;
-        case Material::Crystal: y = crystal (s, driven); break;
-        case Material::Plasma:  y = plasma (s, driven); break;
-        case Material::Vapor:   y = vapor (s, driven); break;
-        case Material::Metal:   y = metal (s, driven); break;
-        case Material::Light:   y = light (s, driven); break;
+        case Material::Liquid:  y = liquid (s, driven, reaction); break;
+        case Material::Crystal: y = crystal (s, driven, reaction); break;
+        case Material::Plasma:  y = plasma (s, driven, reaction); break;
+        case Material::Vapor:   y = vapor (s, driven, reaction); break;
+        case Material::Metal:   y = metal (s, driven, reaction); break;
+        case Material::Light:   y = light (s, driven, reaction); break;
     }
     if (! std::isfinite (y)) return 0.0f;
     // These small centered corrections ensure all material property indices

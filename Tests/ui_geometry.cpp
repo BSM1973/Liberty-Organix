@@ -103,6 +103,35 @@ static bool accepts (int width, int height)
     const int trajectoryControlWidth = g.right.w - 2 * trajectoryRightPadding;
     if (trajectoryControlWidth < 300 || trajectoryBottom > g.right.h - 22 ||
         g.right.intersects (g.center) || g.right.intersects (g.footer)) return false;
+    // Three right-panel tabs replace the old two without overlapping.
+    // The reaction inspector uses the same panel but hides property dials.
+    const int tabWidth = (g.right.w - 48) / 3;
+    const Rect tabA {g.right.x + 15, g.right.y + 12, tabWidth, 32};
+    const Rect tabB {g.right.x + 19 + tabWidth, g.right.y + 12, tabWidth, 32};
+    const Rect reactTab {g.right.x + 23 + 2 * tabWidth, g.right.y + 12, tabWidth, 32};
+    const Rect reactionPanel {g.right.x + 10, g.right.y + 50,
+                              g.right.w - 20, g.right.h - 58};
+    if (tabWidth < 98 || tabA.intersects (tabB) ||
+        tabB.intersects (reactTab) ||
+        tabA.intersects (reactTab) ||
+        reactTab.intersects (reactionPanel) ||
+        reactionPanel.intersects (g.center) ||
+        reactionPanel.intersects (g.footer) ||
+        reactionPanel.x < g.right.x ||
+        reactionPanel.right() > g.right.right() ||
+        reactionPanel.y < g.right.y ||
+        reactionPanel.bottom() > g.right.bottom() ||
+        reactionPanel.h < 436) return false;
+    // Real reaction controls: power 64..94, direction 125..154,
+    // amount 191..222, response 250..281, result cards 288..346
+    // and 350..408, with separate footer at panelHeight - 22.
+    const Rect power {0,64,reactionPanel.w,30}, direction {0,125,reactionPanel.w,29};
+    const Rect amount {0,191,reactionPanel.w,31}, response {0,250,reactionPanel.w,31};
+    const Rect cardAB {0,288,reactionPanel.w,58}, cardBA {0,350,reactionPanel.w,58};
+    const Rect finalText {0,reactionPanel.h-22,reactionPanel.w,15};
+    if (power.intersects (direction) || direction.intersects (amount) ||
+        amount.intersects (response) || response.intersects (cardAB) ||
+        cardAB.intersects (cardBA) || cardBA.intersects (finalText)) return false;
     return true;
 }
 int main()

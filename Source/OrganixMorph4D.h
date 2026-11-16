@@ -2,6 +2,7 @@
 #include "MaterialDSP.h"
 #include "OrganixMovement.h"
 #include "MatterDNAModulation.h"
+#include "MaterialReactions.h"
 #include <array>
 #include <algorithm>
 #include <atomic>
@@ -42,17 +43,21 @@ public:
     MorphScene getScene (int scene) const noexcept { return target[static_cast<size_t> (scene)]; }
     void configure (float x, float y,
                     MatterDNA::Features features = {},
-                    MatterDNAControls controls = {}) noexcept;
+                    MatterDNAControls controls = {},
+                    ReactionControls reactions = {}) noexcept;
     void processFrame (const float in[2], float out[2], int channels,
                        float x, float y) noexcept;
     bool hasPendingTransition (int scene) const noexcept;
     float wetAt (const std::array<float,4>& weights) const noexcept;
     float widthAt (const std::array<float,4>& weights) const noexcept;
+    float reactionMeterAB() const noexcept;
+    float reactionMeterBA() const noexcept;
 
 private:
     struct Pair
     {
         MaterialDSP a, b;
+        MaterialReactionLink reaction;
     };
     std::array<std::array<Pair,2>,4> engines;
     std::array<MorphScene,4> target {};
@@ -63,11 +68,13 @@ private:
     int fadeSamples = 1;
     std::array<float,4> blockWeights {{ 1.0f, 0.0f, 0.0f, 0.0f }};
     MorphScene continuousBlend {};
+    ReactionControls reactionSettings {};
     std::array<MorphScene,4> previousContinuous {};
 
     static float renderOne (Pair& pair, const MorphScene& scene,
                             const MorphScene& continuous,
-                            int channel, float input) noexcept;
+                            int channel, float input,
+                            ReactionControls reactions) noexcept;
     static void configureOne (Pair& pair, const MorphScene& scene,
                               const MorphScene& parameters,
                               MatterDNA::Features features,
