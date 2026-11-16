@@ -34,6 +34,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("input", "Input Gain dB", -24.0f, 24.0f, 0.0f);
     add ("output", "Output Gain dB", -24.0f, 12.0f, 0.0f);
     add ("drywet", "Dry Wet", 0.0f, 1.0f, 0.65f);
+    // Matter DNA: analysis is opt-in to preserve all v0.5 sessions.
+    layout.add (std::make_unique<Bool> (pid ("dnaEnable"), "Enable Matter DNA", false));
+    add ("dnaDepth", "Matter DNA Depth", 0.0f, 1.0f, 0.50f);
+    add ("dnaSensitivity", "Matter DNA Sensitivity", 0.0f, 1.0f, 0.50f);
+    add ("dnaCrystalAttack", "DNA Transients to Crystal", 0.0f, 1.0f, 0.80f);
+    add ("dnaVaporAir", "DNA Breath to Vapor", 0.0f, 1.0f, 0.80f);
+    add ("dnaEnergyMotion", "DNA Energy to Motion", 0.0f, 1.0f, 0.40f);
+    add ("dnaSpectralTone", "DNA Spectrum to Tone", 0.0f, 1.0f, 0.25f);
     // Four real controls absent from the earlier reference UI.
     add ("width", "Stereo Width", 0.0f, 2.0f, 1.0f);
     layout.add (std::make_unique<Bool> (pid ("motionFree"), "Motion Free Running", true));
@@ -80,6 +88,7 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     juce::ignoreUnused (samplesPerBlock);
     engineA.prepare (sampleRate, getTotalNumInputChannels());
     engineB.prepare (sampleRate, getTotalNumInputChannels());
+    matterDNA.prepare (sampleRate);
     wetSmooth.reset (sampleRate, 0.025);
     bypassSmooth.reset (sampleRate, 0.008);
     outputSmooth.reset (sampleRate, 0.025);
@@ -94,7 +103,12 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     setLatencySamples (0); // Current time-domain engines require no fixed algorithmic delay.
 }
 
-void OrganixAudioProcessor::releaseResources() { engineA.reset(); engineB.reset(); }
+void OrganixAudioProcessor::releaseResources()
+{
+    engineA.reset();
+    engineB.reset();
+    matterDNA.reset();
+}
 
 bool OrganixAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
@@ -143,6 +157,26 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     b.feedback = juce::jlimit (0.0f, 0.88f, raw (parameters, "bFeedback") + space * 0.25f);
     b.energy = energy;
     b.density = density;
+    organix::MatterDNA::Features dnaFeatures;
+    const bool dnaIsEnabled = raw (parameters, "dnaEnable") > 0.5f;
+    if (dnaIsEnabled)
+    {
+        const auto* dnaLeft = buffer.getReadPointer (0);
+        const auto* dnaRight = channels == 2 ? buffer.getReadPointer (1) : nullptr;
+        dnaFeatures = matterDNA.analyzeBlock (dnaLeft, dnaRight, n, channels);
+    }
+    const auto meter = [] (std::atomic<float>& dst, float value) noexcept
+    {
+        dst.store (value, std::memory_order_relaxed);
+    };
+    meter (dnaEnergy, dnaFeatures.energy);
+    meter (dnaTransient, dnaFeatures.transient);
+    meter (dnaAir, dnaFeatures.air);
+    meter (dnaMotion, dnaFeatures.motion);
+    meter (dnaCentroid, dnaFeatures.centroid);
+    meter (dnaLow, dnaFeatures.low);
+    meter (dnaMid, dnaFeatures.mid);
+    meter (dnaHigh, dnaFeatures.high);
     constexpr const char* shapeIdsA[] = {
         "aShape01", "aShape02", "aShape03", "aShape04",
         "aShape05", "aShape06", "aShape07", "aShape08",
@@ -157,6 +191,20 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     {
         a.shape[i] = raw (parameters, shapeIdsA[i]);
         b.shape[i] = raw (parameters, shapeIdsB[i]);
+    }
+    if (dnaIsEnabled)
+    {
+        organix::MatterDNAControls dnaControls;
+        dnaControls.enabled = true;
+        dnaControls.depth = raw (parameters, "dnaDepth");
+        dnaControls.sensitivity = raw (parameters, "dnaSensitivity");
+        dnaControls.crystalAttack = raw (parameters, "dnaCrystalAttack");
+        dnaControls.vaporAir = raw (parameters, "dnaVaporAir");
+        dnaControls.energyMotion = raw (parameters, "dnaEnergyMotion");
+        dnaControls.spectralTone = raw (parameters, "dnaSpectralTone");
+        organix::applyMatterDNA (aMaterial, a, dnaFeatures, dnaControls);
+        if (activeB)
+            organix::applyMatterDNA (bMaterial, b, dnaFeatures, dnaControls);
     }
     engineA.configure (aMaterial, a);
     if (activeB) engineB.configure (bMaterial, b);
@@ -300,6 +348,14 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("motionRate", 0.25f);
     setParameter ("motionTrajectory", 0.0f);
     setParameter ("motionDivision", 2.0f);
+    // Safe neutral recall: v0.5 factory presets remain unchanged by Matter DNA.
+    setParameter ("dnaEnable", 0.0f);
+    setParameter ("dnaDepth", 0.5f);
+    setParameter ("dnaSensitivity", 0.5f);
+    setParameter ("dnaCrystalAttack", 0.8f);
+    setParameter ("dnaVaporAir", 0.8f);
+    setParameter ("dnaEnergyMotion", 0.4f);
+    setParameter ("dnaSpectralTone", 0.25f);
     setParameter ("input", 0.0f);
     setParameter ("output", aggressive ? -4.0f : -1.5f);
     setParameter ("bypass", 0.0f);
