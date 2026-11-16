@@ -45,7 +45,7 @@ cmake --build build --config Release --parallel 4
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-**macOS:** JUCE builds AU, VST3 and Standalone. **Windows:** JUCE builds VST3 and Standalone. This version is not signed or notarized. The CI build is a *proposed* workflow; actual GitHub Actions compilation has not yet run.
+**macOS:** JUCE builds AU, VST3 and Standalone. **Windows:** JUCE builds VST3 and Standalone. This version is not signed or notarized. GitHub Actions has validated the v0.1 AU/VST3 macOS ARM64 build. The new v0.2 UI branch needs a separate green CI run and manual DAW visual/audio validation.
 
 To run only dependency-free DSP tests (on any platform with C++17):
 
