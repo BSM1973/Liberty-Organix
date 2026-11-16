@@ -34,6 +34,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("input", "Input Gain dB", -24.0f, 24.0f, 0.0f);
     add ("output", "Output Gain dB", -24.0f, 12.0f, 0.0f);
     add ("drywet", "Dry Wet", 0.0f, 1.0f, 0.65f);
+    // Cross-material modulation is opt-in for old projects and factory patches.
+    layout.add (std::make_unique<Bool> (pid ("reactionEnable"), "Material Reactions Enabled", false));
+    add ("reactionAmount", "Material Reactions Amount", 0.0f, 1.0f, 0.60f);
+    layout.add (std::make_unique<Choice> (
+        pid ("reactionDirection"), "Material Reaction Direction",
+        juce::StringArray {"A TO B", "B TO A", "MUTUAL"}, 2));
+    add ("reactionResponse", "Material Reactions Response", 0.0f, 1.0f, 0.40f);
     layout.add (std::make_unique<Bool> (pid ("morphEnable"), "Four Scene Morph Enabled", false));
     add ("morphX", "Four Scene Morph X", 0.0f, 1.0f, 0.0f);
     add ("morphY", "Four Scene Morph Y", 0.0f, 1.0f, 0.0f);
@@ -104,6 +111,9 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     engineB.prepare (sampleRate, getTotalNumInputChannels());
     matterDNA.prepare (sampleRate);
     morphRender.prepare (sampleRate, getTotalNumInputChannels());
+    reactionLink.prepare (sampleRate);
+    reactionActivityAB.store (0.0f, std::memory_order_relaxed);
+    reactionActivityBA.store (0.0f, std::memory_order_relaxed);
     receivedTrajectoryVersion = 0;
     trajectoryPhase = 0.0f;
     smoothTrajectoryX = 0.5f;
@@ -135,6 +145,7 @@ void OrganixAudioProcessor::releaseResources()
     engineB.reset();
     matterDNA.reset();
     morphRender.reset();
+    reactionLink.reset();
     trajectoryPhase = 0.0f;
     smoothTrajectoryX = smoothTrajectoryY = 0.5f;
 }
@@ -161,6 +172,12 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     if (channels <= 0 || n <= 0) return;
 
     const bool activeB = raw (parameters, "enableB") > 0.5f;
+    organix::ReactionControls reactions;
+    reactions.enabled = raw (parameters, "reactionEnable") > 0.5f;
+    reactions.amount = raw (parameters, "reactionAmount");
+    reactions.direction = juce::jlimit (0, 2,
+        static_cast<int> (raw (parameters, "reactionDirection")));
+    reactions.response = raw (parameters, "reactionResponse");
     const int routing = juce::jlimit (0, 3, static_cast<int> (raw (parameters, "routing")));
     const auto aMaterial = static_cast<organix::Material> (juce::jlimit (0, 5, static_cast<int> (raw (parameters, "materialA"))));
     const auto bMaterial = static_cast<organix::Material> (juce::jlimit (0, 5, static_cast<int> (raw (parameters, "materialB"))));
@@ -326,7 +343,8 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 currentXY, trajectoryDepth)
             : organix::TrajectoryPoint {morphXSmooth.getCurrentValue(),
                                         morphYSmooth.getCurrentValue()};
-        morphRender.configure (configureXY.x, configureXY.y, dnaFeatures, morphDNA);
+        morphRender.configure (configureXY.x, configureXY.y,
+                               dnaFeatures, morphDNA, reactions);
     }
 
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
@@ -406,18 +424,10 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             {
                 if (! activeB)
                     y = engineA.process (ch, x);
-                else if (routing == 1)
-                    y = engineB.process (ch, engineA.process (ch, x));
-                else if (routing == 2)
-                    y = engineA.process (ch, engineB.process (ch, x));
                 else
-                {
-                    const float xa = engineA.process (ch, x);
-                    const float xb = engineB.process (ch, x);
-                    y = (1.0f - balance) * xa + balance * xb;
-                    if (routing == 3)
-                        y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
-                }
+                    y = reactionLink.process (engineA, engineB,
+                        aMaterial, bMaterial, routing, balance, fusion,
+                        ch, x, reactions);
             }
             originals[ch] = original;
             inputs[ch] = x;
@@ -461,6 +471,13 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             peak = std::max (peak, std::abs (destination));
         }
     }
+    const float standardWeight = morphBlendSmooth.getCurrentValue();
+    const float activityAB = reactionLink.activityAB() * (1.0f - standardWeight) +
+                             (renderMorph ? morphRender.reactionMeterAB() : 0.0f) * standardWeight;
+    const float activityBA = reactionLink.activityBA() * (1.0f - standardWeight) +
+                             (renderMorph ? morphRender.reactionMeterBA() : 0.0f) * standardWeight;
+    reactionActivityAB.store (reactions.enabled ? activityAB : 0.0f, std::memory_order_relaxed);
+    reactionActivityBA.store (reactions.enabled ? activityBA : 0.0f, std::memory_order_relaxed);
     const double divisor = static_cast<double> (channels) * n;
     inputRms.store (static_cast<float> (std::sqrt (inputSquare / divisor)), std::memory_order_relaxed);
     outputRms.store (static_cast<float> (std::sqrt (outputSquare / divisor)), std::memory_order_relaxed);
@@ -513,6 +530,10 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("morphEnable", 0.0f);
     setParameter ("morphX", 0.0f);
     setParameter ("morphY", 0.0f);
+    setParameter ("reactionEnable", 0.0f);
+    setParameter ("reactionAmount", 0.60f);
+    setParameter ("reactionDirection", 2.0f);
+    setParameter ("reactionResponse", 0.40f);
     setParameter ("trajectoryEnable", 0.0f);
     setParameter ("trajectoryShape", 0.0f);
     setParameter ("trajectorySpeed", 0.25f);
