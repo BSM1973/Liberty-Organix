@@ -58,8 +58,10 @@ private:
     int fadeSamples = 1;
     std::array<float,4> blockWeights {{ 1.0f, 0.0f, 0.0f, 0.0f }};
     MorphScene continuousBlend {};
+    std::array<MorphScene,4> previousContinuous {};
 
     static float renderOne (Pair& pair, const MorphScene& scene,
+                            const MorphScene& continuous,
                             int channel, float input) noexcept;
     static void configureOne (Pair& pair, const MorphScene& scene,
                               const MorphScene& parameters) noexcept;
