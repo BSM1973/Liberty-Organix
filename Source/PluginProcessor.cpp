@@ -246,7 +246,22 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     morphYSmooth.setTargetValue (morphYTarget);
     const bool renderMorph = morphEnabled || morphBlendSmooth.getCurrentValue() > 0.00001f;
     if (renderMorph)
-        morphRender.configure (morphXSmooth.getCurrentValue(), morphYSmooth.getCurrentValue());
+    {
+        organix::MatterDNAControls morphDNA;
+        morphDNA.enabled = dnaIsEnabled;
+        if (dnaIsEnabled)
+        {
+            morphDNA.depth = raw (parameters, "dnaDepth");
+            morphDNA.sensitivity = raw (parameters, "dnaSensitivity");
+            morphDNA.crystalAttack = raw (parameters, "dnaCrystalAttack");
+            morphDNA.vaporAir = raw (parameters, "dnaVaporAir");
+            morphDNA.energyMotion = raw (parameters, "dnaEnergyMotion");
+            morphDNA.spectralTone = raw (parameters, "dnaSpectralTone");
+        }
+        morphRender.configure (morphXSmooth.getCurrentValue(),
+                               morphYSmooth.getCurrentValue(),
+                               dnaFeatures, morphDNA);
+    }
 
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
     wetSmooth.setTargetValue (raw (parameters, "drywet"));
