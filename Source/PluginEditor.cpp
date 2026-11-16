@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "OrganixUILayout.h"
 #include <algorithm>
 #include <cmath>
 
@@ -657,22 +658,20 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
 }
 void OrganixAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced (16);
-    // Reserve the signature/footer baseline instead of stretching the center
-    // panel into the last 35px of the editor. Matches the reference composition.
-    area.removeFromBottom (getHeight() >= 910 ? 34 : 12);
-    headerBounds = area.removeFromTop (94);
-    area.removeFromTop (14);
-    const int footH = juce::jlimit (160, 190, juce::roundToInt (getHeight() * 0.19f));
-    footerAll = area.removeFromBottom (footH);
-    area.removeFromBottom (14);
-    const int leftW = juce::jlimit (165, 194, juce::roundToInt (getWidth() * 0.116f));
-    const int rightW = juce::jlimit (350, 424, juce::roundToInt (getWidth() * 0.277f));
-    leftBounds = area.removeFromLeft (leftW);
-    area.removeFromLeft (14);
-    rightBounds = area.removeFromRight (rightW);
-    area.removeFromRight (14);
-    centerBounds = area;
+    const auto geometry = organix::layout::calculate (getWidth(), getHeight());
+    jassert (geometry.valid (getWidth(), getHeight()));
+    const auto toJuce = [] (const organix::layout::Rect& r)
+    {
+        return juce::Rectangle<int> (r.x, r.y, r.w, r.h);
+    };
+    headerBounds = toJuce (geometry.header);
+    leftBounds = toJuce (geometry.left);
+    centerBounds = toJuce (geometry.center);
+    rightBounds = toJuce (geometry.right);
+    footerAll = toJuce (geometry.footer);
+    footerFusion = toJuce (geometry.fusion);
+    footerMotion = toJuce (geometry.movement);
+    footerOutput = toJuce (geometry.output);
     visualizer.setBounds (centerBounds);
 
     auto headActions = headerBounds;
@@ -734,14 +733,7 @@ void OrganixAudioProcessorEditor::resized()
         {
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
-        const int w = footerAll.getWidth();
-        const int gap = 14;
-        const int fusionW = juce::roundToInt (w * 0.345f);
-        const int movementW = juce::roundToInt (w * 0.285f);
-        footerFusion = { footerAll.getX(), footerAll.getY(), fusionW, footerAll.getHeight() };
-        footerMotion = { footerFusion.getRight() + gap, footerAll.getY(), movementW - gap, footerAll.getHeight() };
-        footerOutput = { footerMotion.getRight() + gap, footerAll.getY(),
-                         footerAll.getRight() - (footerMotion.getRight() + gap), footerAll.getHeight() };
+        // All three panel bounds come from the shared, unit-tested geometry model.
         routing.setVisible (true);
         routing.setBounds (footerFusion.getRight() - 174, footerFusion.getY() + 10, 158, 28);
         for (int i = 0; i < 7; ++i)
