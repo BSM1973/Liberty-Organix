@@ -20,6 +20,8 @@ UI_FILES = [
     "OrganixPresetBrowser.cpp",
     "OrganixMaterialButton.h",
     "OrganixI18n.h",
+    "OrganixMatterDNAView.cpp",
+    "OrganixMatterDNAView.h",
 ]
 # These are known to render as missing-glyph boxes or stray symbols on some
 # hosts/fonts. Use ASCII or draw vector icons rather than font characters.
