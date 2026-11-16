@@ -178,7 +178,7 @@ void OrganixReactionPanel::paint (juce::Graphics& g)
     const bool activeB = readParameter (audio, "enableB") > 0.5f;
     const int mode = juce::jlimit (0, 2,
         static_cast<int> (readParameter (audio, "reactionDirection")));
-    const int rowsY[] = {299, 365};
+    const int rowsY[] = {288, 350};
     for (int index = 0; index < 2; ++index)
     {
         const int y = rowsY[index];
