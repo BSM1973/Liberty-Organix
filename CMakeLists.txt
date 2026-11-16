@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Organix VERSION 0.3.0 LANGUAGES C CXX)
+project(Organix VERSION 0.4.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -41,6 +41,7 @@ if (ORGANIX_BUILD_PLUGIN)
         Source/MaterialDSP.cpp
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/OrganixPresetBrowser.cpp
     )
     target_compile_definitions(Organix PUBLIC
         JUCE_WEB_BROWSER=0
