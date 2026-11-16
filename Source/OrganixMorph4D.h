@@ -1,6 +1,7 @@
 #pragma once
 #include "MaterialDSP.h"
 #include "OrganixMovement.h"
+#include "MatterDNAModulation.h"
 #include <array>
 #include <algorithm>
 #include <atomic>
@@ -39,7 +40,9 @@ public:
     void reset() noexcept;
     void setScene (int scene, MorphScene next) noexcept;
     MorphScene getScene (int scene) const noexcept { return target[static_cast<size_t> (scene)]; }
-    void configure (float x, float y) noexcept;
+    void configure (float x, float y,
+                    MatterDNA::Features features = {},
+                    MatterDNAControls controls = {}) noexcept;
     void processFrame (const float in[2], float out[2], int channels,
                        float x, float y) noexcept;
     bool hasPendingTransition (int scene) const noexcept;
@@ -66,6 +69,8 @@ private:
                             const MorphScene& continuous,
                             int channel, float input) noexcept;
     static void configureOne (Pair& pair, const MorphScene& scene,
-                              const MorphScene& parameters) noexcept;
+                              const MorphScene& parameters,
+                              MatterDNA::Features features,
+                              MatterDNAControls controls) noexcept;
 };
 } // namespace organix
