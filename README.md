@@ -1,5 +1,16 @@
 # Organix — Living Audio Matter
 
+## Premium native GUI v0.2 (feature branch)
+- Visual architecture based on six supplied MATTERFLOW reference images, adapted to the **ORGANIX** brand.
+- Six distinctive native JUCE material views; 3×4 material property grid.
+- Editable layer A/B; 24 persistent, automatable property values and real bounded prototype audio effects.
+- Elegant matte knob rendering, dark midnight design tokens, responsive three-panel footer and eight-macro view.
+- Six technical UI documents under `docs/UI-*.md`.
+- Material-specific DSP is *prototype-grade*: nonlinear/ring/granular/resonator/delay engines exist, but STFT spectral resynthesis, complete trajectory editing, physics and final 100-preset listening QA are still outstanding.
+- Build status: verify the CI workflow for the latest commit. CI compilation alone does not validate DAW audio, usability or distribution signing.
+
+
+
 **Liberty Music Software**  
 *Shape Sound. Transform Matter. Create the Impossible.*
 
