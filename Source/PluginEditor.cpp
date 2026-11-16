@@ -493,7 +493,15 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     tabA.onClick = [this] { selectLayer (0); };
     tabB.onClick = [this] { selectLayer (1); };
     enableB.onClick = [this] { setAudioToggle ("enableB", vParam (audio, "enableB") < 0.5f); };
-    macroToggle.onClick = [this] { macroPage = ! macroPage; resized(); repaint(); };
+    macroToggle.onClick = [this]
+    {
+        macroPage = ! macroPage;
+        macroToggle.setButtonText (macroPage ? "MAIN" : "MACROS");
+        macroToggle.setColour (juce::TextButton::buttonColourId,
+                               macroPage ? ui::inset.brighter (0.13f) : ui::surface);
+        resized();
+        repaint();
+    };
     for (auto* c : { &engaged, &tabA, &tabB, &enableB, &macroToggle })
         addAndMakeVisible (*c);
 
@@ -613,10 +621,20 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 36, 18 },
                10.0f, ui::secondary);
     }
+    // Deliberate visual breathing room below the three operational cards.
+    title (g, "Shape Sound. Transform Matter. Create the Impossible.",
+           { 23, footerAll.getBottom() + 6, juce::jmin (600, getWidth() - 46), 17 },
+           10.0f, ui::subdued);
+    title (g, "LIBERTY MUSIC SOFTWARE   /   CORE EDITION",
+           { getWidth() - 375, footerAll.getBottom() + 6, 350, 17 },
+           10.0f, ui::subdued, true, juce::Justification::centredRight);
 }
 void OrganixAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced (16);
+    // Reserve the signature/footer baseline instead of stretching the center
+    // panel into the last 35px of the editor. Matches the reference composition.
+    area.removeFromBottom (getHeight() >= 910 ? 34 : 12);
     headerBounds = area.removeFromTop (94);
     area.removeFromTop (14);
     const int footH = juce::jlimit (160, 190, juce::roundToInt (getHeight() * 0.19f));
@@ -674,15 +692,22 @@ void OrganixAudioProcessorEditor::resized()
             auto& d = macros[static_cast<size_t> (i)];
             d.slider.setVisible (true);
             d.label.setVisible (true);
+            d.value.setVisible (true);
             layoutDial (d, { footerAll.getX() + 20 + i * stepW, footerAll.getY() + 39,
                              stepW, footerAll.getHeight() - 48 });
         }
-        for (auto& d : bottom) { d.slider.setVisible (false); d.label.setVisible (false); }
+        for (auto& d : bottom)
+        {
+            d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
+        }
         routing.setVisible (false);
     }
     else
     {
-        for (auto& d : macros) { d.slider.setVisible (false); d.label.setVisible (false); }
+        for (auto& d : macros)
+        {
+            d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
+        }
         const int w = footerAll.getWidth();
         const int gap = 14;
         const int fusionW = juce::roundToInt (w * 0.345f);
