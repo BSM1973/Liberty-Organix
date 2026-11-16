@@ -1,0 +1,6 @@
+add_executable(organix_dsp_smoke dsp_smoke.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_dsp_smoke PRIVATE cxx_std_17)
+add_test(NAME organix_dsp_smoke COMMAND organix_dsp_smoke)
+add_executable(organix_preset_registry preset_registry.cpp)
+target_compile_features(organix_preset_registry PRIVATE cxx_std_17)
+add_test(NAME organix_preset_registry COMMAND organix_preset_registry)
