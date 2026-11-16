@@ -206,6 +206,7 @@ void MorphRender::configure (float x, float y) noexcept
             auto oldSceneSet = target;
             oldSceneSet[index] = previous[index];
             const auto oldBlend = Morph4D::interpolate (oldSceneSet, blockWeights);
+            previousContinuous[index] = oldBlend;
             configureOne (engines[index][static_cast<size_t> (bank)],
                           previous[index], oldBlend);
             configureOne (engines[index][static_cast<size_t> (1 - bank)],
@@ -215,6 +216,7 @@ void MorphRender::configure (float x, float y) noexcept
 }
 
 float MorphRender::renderOne (Pair& pair, const MorphScene& scene,
+                              const MorphScene& continuous,
                               int channel, float input) noexcept
 {
     if (! scene.enableB) return pair.a.process (channel, input);
@@ -222,9 +224,9 @@ float MorphRender::renderOne (Pair& pair, const MorphScene& scene,
     if (scene.routing == 2) return pair.a.process (channel, pair.b.process (channel, input));
     const float a = pair.a.process (channel, input);
     const float b = pair.b.process (channel, input);
-    float out = (1.0f - scene.balance) * a + scene.balance * b;
+    float out = (1.0f - continuous.balance) * a + continuous.balance * b;
     if (scene.routing == 3)
-        out += scene.fusion * 0.27f * std::tanh (3.0f * a * b);
+        out += continuous.fusion * 0.27f * std::tanh (3.0f * a * b);
     return std::isfinite (out) ? out : 0.0f;
 }
 
@@ -246,12 +248,15 @@ void MorphRender::processFrame (const float in[2], float out[2], int channels,
         {
             const float oldOutput = renderOne (
                 engines[k][static_cast<size_t> (active)],
-                transitioning[k] ? previous[k] : target[k], ch, in[ch]);
+                transitioning[k] ? previous[k] : target[k],
+                transitioning[k] ? previousContinuous[k] : continuousBlend,
+                ch, in[ch]);
             float sample = oldOutput;
             if (transitioning[k])
             {
                 const float fresh = renderOne (
-                    engines[k][static_cast<size_t> (1 - active)], target[k], ch, in[ch]);
+                    engines[k][static_cast<size_t> (1 - active)], target[k],
+                    continuousBlend, ch, in[ch]);
                 sample = oldOutput * (1.0f - t) + fresh * t;
             }
             out[ch] += sample * weight[k];
