@@ -166,7 +166,7 @@ void OrganixMatterDNAView::paint (juce::Graphics& g)
     constexpr const char* labelsEN[] = { "ENERGY", "TRANSIENTS", "AIR / BREATH", "CENTROID", "MOTION" };
     for (int i = 0; i < 5; ++i)
     {
-        const int y = 42 + i * 25;
+        const int y = 41 + i * 23;
         const auto colour = i == 1 ? ui::accentFor (1) :
                             i == 2 ? ui::accentFor (3) : ui::accentFor (0);
         g.setColour (ui::secondary);
