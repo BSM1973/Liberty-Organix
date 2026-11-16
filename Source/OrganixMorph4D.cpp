@@ -242,17 +242,7 @@ float MorphRender::renderOne (Pair& pair, const MorphScene& scene,
              static_cast<Material> (scene.materialB),
              scene.routing, continuous.balance, continuous.fusion,
              channel, input, reactions);
-    // Existing routing mix is implemented within MaterialReactionLink.
-    /*
-    if (scene.routing == 1) return pair.b.process (channel, pair.a.process (channel, input));
-    if (scene.routing == 2) return pair.a.process (channel, pair.b.process (channel, input));
-    const float a = pair.a.process (channel, input);
-    const float b = pair.b.process (channel, input);
-    float out = (1.0f - continuous.balance) * a + continuous.balance * b;
-    if (scene.routing == 3)
-        out += continuous.fusion * 0.27f * std::tanh (3.0f * a * b);
-    return std::isfinite (out) ? out : 0.0f;
-    */
+
 }
 
 void MorphRender::processFrame (const float in[2], float out[2], int channels,
