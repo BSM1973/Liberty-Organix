@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "OrganixUILayout.h"
 #include <algorithm>
 #include <cmath>
 
@@ -47,6 +48,30 @@ MatterView::~MatterView()
     if (gestureX != nullptr) gestureX->endChangeGesture();
     if (gestureY != nullptr) gestureY->endChangeGesture();
 }
+void MatterView::timerCallback()
+{
+    // All animation work stays on the GUI message thread. No buffer or
+    // allocation is introduced in processBlock().
+    if (! isShowing()) return;
+    const int id = juce::jlimit (0, 5, static_cast<int> (
+        vParam (audio, layer == 0 ? "materialA" : "materialB")));
+    if (priorMaterial != id)
+    {
+        priorMaterial = id;
+        materialReveal = 0.0f;
+    }
+    const float rms = juce::jlimit (0.0f, 1.0f,
+        audio.outputRms.load (std::memory_order_relaxed) * 3.8f);
+    const float peak = juce::jlimit (0.0f, 1.0f,
+        audio.outputPeak.load (std::memory_order_relaxed));
+    visualRms += (rms - visualRms) * (rms > visualRms ? 0.24f : 0.12f);
+    visualPeak = juce::jmax (peak, visualPeak * 0.87f);
+    const float movement = vParam (audio, layer == 0 ? "aMotion" : "bMotion");
+    clock += 0.012f + movement * 0.018f;
+    if (clock >= 1000.0f) clock -= 1000.0f;
+    materialReveal = juce::jmin (1.0f, materialReveal + 0.10f);
+    repaint();
+}
 void MatterView::setXY (juce::Point<float> point)
 {
     const auto plot = getLocalBounds().toFloat().reduced (20.0f, 20.0f)
@@ -58,6 +83,10 @@ void MatterView::setXY (juce::Point<float> point)
 }
 void MatterView::mouseDown (const juce::MouseEvent& e)
 {
+    // Header, subtitles and the RMS meter area must not trigger XY automation.
+    const auto field = getLocalBounds().toFloat().reduced (20.0f, 20.0f)
+                            .withTrimmedTop (104.0f).withTrimmedBottom (80.0f);
+    if (! field.contains (e.position)) return;
     const char* xId = layer == 0 ? "aShape03" : "bShape03";
     const char* yId = layer == 0 ? "aShape08" : "bShape08";
     gestureX = audio.parameters.getParameter (xId);
@@ -82,14 +111,10 @@ void MatterView::paint (juce::Graphics& g)
     const int id = juce::jlimit (0, 5, static_cast<int> (vParam (audio, layer == 0 ? "materialA" : "materialB")));
     const int other = juce::jlimit (0, 5, static_cast<int> (vParam (audio, layer == 0 ? "materialB" : "materialA")));
     const auto accent = ui::accentFor (id);
-    const float energy = juce::jlimit (0.0f, 1.0f, audio.outputRms.load (std::memory_order_relaxed) * 3.8f);
-    const float peak = juce::jlimit (0.0f, 1.0f, audio.outputPeak.load (std::memory_order_relaxed));
-    const float movement = vParam (audio, layer == 0 ? "aMotion" : "bMotion");
+    const float energy = visualRms;
+    const float peak = visualPeak;
     const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
     const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
-    clock += 0.012f + movement * 0.018f;
-    if (clock > 1000.0f) clock = 0.0f;
-
     const auto whole = getLocalBounds();
     title (g, "INTERACTIVE SOUND FIELD", whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
            10.0f, ui::subdued, true);
@@ -97,10 +122,13 @@ void MatterView::paint (juce::Graphics& g)
            26.0f, accent, false);
     title (g, layer == 0 ? "/ A" : "/ B", whole.withTrimmedLeft (191).withTrimmedTop (42).withHeight (21),
            11.0f, ui::subdued, true);
-    title (g, "FUSED WITH", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
+    const bool secondActive = vParam (audio, "enableB") > 0.5f;
+    title (g, secondActive ? "FUSED WITH" : "SECOND LAYER", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
            9.0f, ui::subdued, true, juce::Justification::centredRight);
-    title (g, ui::name[static_cast<size_t> (other)], whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
-           11.0f, ui::accentFor (other), true, juce::Justification::centredRight);
+    title (g, secondActive ? ui::name[static_cast<size_t> (other)] : "DISENGAGED",
+           whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
+           11.0f, secondActive ? ui::accentFor (other) : ui::subdued,
+           true, juce::Justification::centredRight);
     g.setColour (ui::border); g.drawLine (20.0f, 84.0f, rect.getRight() - 20.0f, 84.0f, 1.0f);
     title (g, "MATERIAL SURFACE", whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::subdued);
@@ -127,6 +155,8 @@ void MatterView::paint (juce::Graphics& g)
     g.setColour (accent.withAlpha (0.18f));
     g.drawEllipse (cx - radius * 1.1f, cy - radius * 1.1f, radius * 2.2f, radius * 2.2f, 1.0f);
 
+    // Reveal the new engine over ten frames instead of snapping.
+    g.beginTransparencyLayer (materialReveal);
     if (id == 0) // LIQUID: nested fluid contour waves.
     {
         for (int ring = 0; ring < 13; ++ring)
@@ -251,6 +281,7 @@ void MatterView::paint (juce::Graphics& g)
         }
     }
 
+    g.endTransparencyLayer();
     g.setColour (accent.withAlpha (0.78f));
     g.drawEllipse (cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, 1.0f);
     g.drawLine (cx - 5.0f, cy, cx + 5.0f, cy, 1.0f);
@@ -294,39 +325,72 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
                                                 const juce::String& label, juce::Colour accent,
                                                 bool percent)
 {
+    dial.percent = percent;
     dial.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     dial.slider.setRotaryParameters (pi * 1.25f, pi * 2.75f, true);
-    dial.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 66, 16);
+    dial.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     dial.slider.setDoubleClickReturnValue (true, percent ? 0.5 : 0.0);
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
-    dial.slider.setColour (juce::Slider::textBoxTextColourId, accent);
-    dial.slider.setColour (juce::Slider::textBoxBackgroundColourId, ui::panel);
-    dial.slider.setColour (juce::Slider::textBoxOutlineColourId, ui::panel);
-    if (percent)
-    {
-        dial.slider.textFromValueFunction = [] (double value) {
-            return juce::String (juce::roundToInt (value * 100.0)) + "%";
-        };
-        dial.slider.valueFromTextFunction = [] (const juce::String& input) {
-            return juce::jlimit (0.0, 1.0, input.getDoubleValue() / 100.0);
-        };
-    }
+    dial.slider.setMouseDragSensitivity (180);
+    dial.slider.setTooltip (label + " — drag to adjust, double-click to reset");
+
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
     dial.label.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::plain)));
     dial.label.setJustificationType (juce::Justification::centred);
+    dial.label.setInterceptsMouseClicks (false, false);
+
+    dial.value.setJustificationType (juce::Justification::centred);
+    dial.value.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+    dial.value.setColour (juce::Label::textColourId, accent);
+    dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
+    dial.value.setEditable (true, true, false);
+    dial.value.setTooltip ("Click to type an exact value");
+    dial.value.onTextChange = [&dial]
+    {
+        double value = dial.value.getText().getDoubleValue();
+        if (dial.percent) value /= 100.0;
+        dial.slider.setValue (juce::jlimit (dial.slider.getMinimum(),
+                                          dial.slider.getMaximum(), value),
+                              juce::sendNotificationSync);
+    };
+    dial.slider.onValueChange = [&dial]
+    {
+        const auto value = dial.slider.getValue();
+        const auto text = dial.percent
+            ? juce::String (juce::roundToInt (value * 100.0)) + "%"
+            : juce::String (value, 1) + " dB";
+        dial.value.setText (text, juce::dontSendNotification);
+    };
+
     addAndMakeVisible (dial.slider);
     addAndMakeVisible (dial.label);
+    addAndMakeVisible (dial.value);
     if (id.isNotEmpty())
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, id, dial.slider);
+    dial.slider.onValueChange();
 }
 void OrganixAudioProcessorEditor::layoutDial (Dial& dial, juce::Rectangle<int> region)
 {
-    if (region.isEmpty()) { dial.slider.setBounds (0, 0, 0, 0); dial.label.setBounds (0, 0, 0, 0); return; }
-    auto content = region.reduced (3, 3);
+    if (region.isEmpty())
+    {
+        dial.slider.setBounds (0, 0, 0, 0);
+        dial.label.setBounds (0, 0, 0, 0);
+        dial.value.setBounds (0, 0, 0, 0);
+        return;
+    }
+
+    // Fidelity layout: rotary ring, then name, then numeric value.
+    // Values always share the same baseline in a grid row.
+    auto content = region.reduced (3, 2);
+    dial.value.setBounds (content.removeFromBottom (18));
     dial.label.setBounds (content.removeFromBottom (18));
-    dial.slider.setBounds (content);
+    const int diameter = juce::jmax (20, std::min ({ 66, content.getWidth() - 8,
+                                                      content.getHeight() - 2 }));
+    dial.slider.setBounds (content.getCentreX() - diameter / 2,
+                           content.getCentreY() - diameter / 2,
+                           diameter, diameter);
 }
 int OrganixAudioProcessorEditor::activeMaterial (int layerIndex) const
 {
@@ -344,8 +408,11 @@ void OrganixAudioProcessorEditor::bindProperties()
         const auto parameterId = juce::String (selectedLayer == 0 ? "aShape" : "bShape") + suffix;
         dial.label.setText (ui::controls[static_cast<size_t> (id)][static_cast<size_t> (i)], juce::dontSendNotification);
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
-        dial.slider.setColour (juce::Slider::textBoxTextColourId, ui::accentFor (id));
+        dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
+        dial.slider.setTooltip (dial.label.getText() + " — " + (selectedLayer == 0 ? "Layer A" : "Layer B") +
+                                " (automatable, double-click to reset)");
+        dial.slider.onValueChange();
     }
 }
 void OrganixAudioProcessorEditor::updateMaterialState()
@@ -354,18 +421,8 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     const int selected = activeMaterial (selectedLayer);
     const bool enabled = vParam (audio, "enableB") > 0.5f;
     for (int i = 0; i < 6; ++i)
-    {
-        auto& button = materialButtons[static_cast<size_t> (i)];
-        const auto accent = ui::accentFor (i);
-        const bool isSelected = i == selected;
-        const auto number = juce::String (i + 1).paddedLeft ('0', 2);
-        juce::String badges;
-        if (i == a) badges += "  A";
-        if (enabled && i == b) badges += "  B";
-        button.setButtonText (number + "   " + ui::name[static_cast<size_t> (i)] + badges);
-        button.setColour (juce::TextButton::buttonColourId, isSelected ? ui::inset : ui::surface);
-        button.setColour (juce::TextButton::textColourOffId, isSelected ? accent : ui::secondary);
-    }
+        materialButtons[static_cast<size_t> (i)].setLayerState (
+            i == selected, i == a, enabled && i == b);
     tabA.setColour (juce::TextButton::buttonColourId, selectedLayer == 0 ? ui::inset : ui::surface);
     tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
     tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
@@ -379,7 +436,7 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     for (auto& dial : properties)
     {
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (selected));
-        dial.slider.setColour (juce::Slider::textBoxTextColourId, ui::accentFor (selected));
+        dial.value.setColour (juce::Label::textColourId, ui::accentFor (selected));
     }
     for (int i = 0; i < 12; ++i)
         properties[static_cast<size_t> (i)].label.setText (
@@ -433,7 +490,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     for (int i = 0; i < 6; ++i)
     {
         auto& button = materialButtons[static_cast<size_t> (i)];
-        button.setColour (juce::TextButton::buttonColourId, ui::surface);
+        button.setMaterial (i);
         button.onClick = [this, i] { selectMaterial (i); };
         addAndMakeVisible (button);
     }
@@ -472,7 +529,15 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     tabA.onClick = [this] { selectLayer (0); };
     tabB.onClick = [this] { selectLayer (1); };
     enableB.onClick = [this] { setAudioToggle ("enableB", vParam (audio, "enableB") < 0.5f); };
-    macroToggle.onClick = [this] { macroPage = ! macroPage; resized(); repaint(); };
+    macroToggle.onClick = [this]
+    {
+        macroPage = ! macroPage;
+        macroToggle.setButtonText (macroPage ? "MAIN" : "MACROS");
+        macroToggle.setColour (juce::TextButton::buttonColourId,
+                               macroPage ? ui::inset.brighter (0.13f) : ui::surface);
+        resized();
+        repaint();
+    };
     for (auto* c : { &engaged, &tabA, &tabB, &enableB, &macroToggle })
         addAndMakeVisible (*c);
 
@@ -552,15 +617,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
            { leftBounds.getX() + 14, leftBounds.getY() + 41, leftBounds.getWidth() - 28, 20 },
            10.0f, ui::subdued);
     const int current = activeMaterial (selectedLayer);
-    for (int i = 0; i < 6; ++i)
-    {
-        if (i != current) continue;
-        const auto b = materialButtons[static_cast<size_t> (i)].getBounds();
-        g.setColour (ui::accentFor (i));
-        g.fillRoundedRectangle (juce::Rectangle<float> (static_cast<float> (b.getX()),
-                          static_cast<float> (b.getY() + 8), 3.0f,
-                          static_cast<float> (b.getHeight() - 16)), 1.3f);
-    }
+    // The active material stripe, icon and layer badges are drawn by MaterialButton.
     g.setColour (ui::engaged); g.fillEllipse (static_cast<float> (leftBounds.getX() + 16),
                               static_cast<float> (leftBounds.getBottom() - 37), 4.0f, 4.0f);
     title (g, "SIX LIVE PROCESSORS",
@@ -600,22 +657,30 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 36, 18 },
                10.0f, ui::secondary);
     }
+    // Deliberate visual breathing room below the three operational cards.
+    title (g, "Shape Sound. Transform Matter. Create the Impossible.",
+           { 23, footerAll.getBottom() + 6, juce::jmin (600, getWidth() - 46), 17 },
+           10.0f, ui::subdued);
+    title (g, "LIBERTY MUSIC SOFTWARE   /   CORE EDITION",
+           { getWidth() - 375, footerAll.getBottom() + 6, 350, 17 },
+           10.0f, ui::subdued, true, juce::Justification::centredRight);
 }
 void OrganixAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced (16);
-    headerBounds = area.removeFromTop (94);
-    area.removeFromTop (14);
-    const int footH = juce::jlimit (160, 190, juce::roundToInt (getHeight() * 0.19f));
-    footerAll = area.removeFromBottom (footH);
-    area.removeFromBottom (14);
-    const int leftW = juce::jlimit (165, 194, juce::roundToInt (getWidth() * 0.116f));
-    const int rightW = juce::jlimit (350, 424, juce::roundToInt (getWidth() * 0.277f));
-    leftBounds = area.removeFromLeft (leftW);
-    area.removeFromLeft (14);
-    rightBounds = area.removeFromRight (rightW);
-    area.removeFromRight (14);
-    centerBounds = area;
+    const auto geometry = organix::layout::calculate (getWidth(), getHeight());
+    jassert (geometry.valid (getWidth(), getHeight()));
+    const auto toJuce = [] (const organix::layout::Rect& r)
+    {
+        return juce::Rectangle<int> (r.x, r.y, r.w, r.h);
+    };
+    headerBounds = toJuce (geometry.header);
+    leftBounds = toJuce (geometry.left);
+    centerBounds = toJuce (geometry.center);
+    rightBounds = toJuce (geometry.right);
+    footerAll = toJuce (geometry.footer);
+    footerFusion = toJuce (geometry.fusion);
+    footerMotion = toJuce (geometry.movement);
+    footerOutput = toJuce (geometry.output);
     visualizer.setBounds (centerBounds);
 
     auto headActions = headerBounds;
@@ -661,23 +726,23 @@ void OrganixAudioProcessorEditor::resized()
             auto& d = macros[static_cast<size_t> (i)];
             d.slider.setVisible (true);
             d.label.setVisible (true);
+            d.value.setVisible (true);
             layoutDial (d, { footerAll.getX() + 20 + i * stepW, footerAll.getY() + 39,
                              stepW, footerAll.getHeight() - 48 });
         }
-        for (auto& d : bottom) { d.slider.setVisible (false); d.label.setVisible (false); }
+        for (auto& d : bottom)
+        {
+            d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
+        }
         routing.setVisible (false);
     }
     else
     {
-        for (auto& d : macros) { d.slider.setVisible (false); d.label.setVisible (false); }
-        const int w = footerAll.getWidth();
-        const int gap = 14;
-        const int fusionW = juce::roundToInt (w * 0.345f);
-        const int movementW = juce::roundToInt (w * 0.285f);
-        footerFusion = { footerAll.getX(), footerAll.getY(), fusionW, footerAll.getHeight() };
-        footerMotion = { footerFusion.getRight() + gap, footerAll.getY(), movementW - gap, footerAll.getHeight() };
-        footerOutput = { footerMotion.getRight() + gap, footerAll.getY(),
-                         footerAll.getRight() - (footerMotion.getRight() + gap), footerAll.getHeight() };
+        for (auto& d : macros)
+        {
+            d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
+        }
+        // All three panel bounds come from the shared, unit-tested geometry model.
         routing.setVisible (true);
         routing.setBounds (footerFusion.getRight() - 174, footerFusion.getY() + 10, 158, 28);
         for (int i = 0; i < 7; ++i)

@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginProcessor.h"
 #include "OrganixUITheme.h"
+#include "OrganixMaterialButton.h"
 #include <array>
 #include <memory>
 
@@ -18,11 +19,14 @@ public:
     int getLayer() const noexcept { return layer; }
 
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override;
     void setXY (juce::Point<float> p);
     OrganixAudioProcessor& audio;
     int layer = 0;
     float clock = 0.0f;
+    float visualRms = 0.0f, visualPeak = 0.0f;
+    float materialReveal = 1.0f;
+    int priorMaterial = -1;
     juce::RangedAudioParameter* gestureX = nullptr;
     juce::RangedAudioParameter* gestureY = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MatterView)
@@ -43,7 +47,8 @@ private:
     struct Dial
     {
         juce::Slider slider;
-        juce::Label label;
+        juce::Label label, value;
+        bool percent = true;
         std::unique_ptr<SliderAttachment> attachment;
     };
 
@@ -74,7 +79,7 @@ private:
     juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" };
     juce::TextButton tabA { "LAYER A" }, tabB { "LAYER B" };
     juce::TextButton enableB { "B ON" };
-    std::array<juce::TextButton, 6> materialButtons;
+    std::array<organix::ui::MaterialButton, 6> materialButtons;
     std::unique_ptr<ComboAttachment> routingAttachment;
     std::array<Dial, 12> properties;
     std::array<Dial, 7> bottom;

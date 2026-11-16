@@ -1,7 +1,7 @@
 name: Organix AU/VST3 — macOS ARM64
 on:
   push:
-    branches: [main]
+    branches: [main, feature/ui-v0.3-precision]
     paths:
       - 'Source/**'
       - 'Tests/**'
@@ -51,7 +51,7 @@ jobs:
           ditto -c -k --keepParent "$VST3" Organix-VST3-macOS-arm64.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Organix-v0.2-macOS-arm64-AU-VST3
+          name: Organix-v0.3-macOS-arm64-AU-VST3
           path: |
             Organix-AU-macOS-arm64.zip
             Organix-VST3-macOS-arm64.zip
