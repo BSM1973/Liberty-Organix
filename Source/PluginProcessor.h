@@ -7,6 +7,7 @@
 #include "MatterDNAModulation.h"
 #include "OrganixMorph4D.h"
 #include "OrganixTrajectory.h"
+#include "MaterialReactions.h"
 #include <array>
 #include <cstdint>
 #include <atomic>
@@ -47,6 +48,8 @@ public:
     std::atomic<float> inputRms {0.0f};
     std::atomic<float> outputRms {0.0f};
     std::atomic<float> outputPeak {0.0f};
+    // Values from the audio engine, observed by the reaction panel only.
+    std::atomic<float> reactionActivityAB {0.0f}, reactionActivityBA {0.0f};
     // Read-only UI meters; audio callback is the sole writer.
     std::atomic<float> dnaEnergy {0.0f}, dnaTransient {0.0f};
     std::atomic<float> dnaAir {0.0f}, dnaMotion {0.0f};
@@ -58,6 +61,7 @@ public:
 private:
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
+    organix::MaterialReactionLink reactionLink;
     organix::MatterDNA matterDNA;
     organix::MorphRender morphRender;
     juce::LinearSmoothedValue<float> morphBlendSmooth, morphXSmooth, morphYSmooth;
