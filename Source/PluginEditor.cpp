@@ -423,11 +423,11 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
-        dial.slider.setTooltip (dial.label.getText() + " — " +
+        dial.slider.setTooltip (dial.label.getText() + "  -  " +
                 ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
                                   selectedLayer == 0 ? "Layer A" : "Layer B") +
-                ui::word (french, " · automatisable, double-clic : réinitialiser",
-                                  " · automatable, double-click: reset"));
+                ui::word (french, "  /  automatisable, double-clic : réinitialiser",
+                                  "  /  automatable, double-click: reset"));
         dial.slider.onValueChange();
     }
 }
@@ -769,7 +769,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                     static_cast<float> (headerBounds.getY() + 45 + i * 7),
                     static_cast<float> (headerBounds.getX() + 43),
                     static_cast<float> (headerBounds.getY() + 45 + i * 7), 1.1f);
-    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D’USINE + PRESETS PERSONNELS",
+    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D'USINE + PRESETS PERSONNELS",
                                 "LIBRARY  /  100 FACTORY + USER PRESETS"),
            { presetDisplay.getX(), presetDisplay.getBottom() + 3,
              presetDisplay.getWidth() + browserButton.getWidth(), 17 },
