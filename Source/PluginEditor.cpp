@@ -448,10 +448,16 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     for (int i = 0; i < 6; ++i)
         materialButtons[static_cast<size_t> (i)].setLayerState (
             i == selected, i == a, enabled && i == b);
-    tabA.setColour (juce::TextButton::buttonColourId, selectedLayer == 0 ? ui::inset : ui::surface);
-    tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
-    tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
-    tabB.setColour (juce::TextButton::textColourOffId, selectedLayer == 1 ? ui::accentFor (b) : ui::secondary);
+    const bool tabAActive = ! reactionPage && selectedLayer == 0;
+    const bool tabBActive = ! reactionPage && selectedLayer == 1;
+    tabA.setColour (juce::TextButton::buttonColourId, tabAActive ? ui::inset : ui::surface);
+    tabB.setColour (juce::TextButton::buttonColourId, tabBActive ? ui::inset : ui::surface);
+    tabA.setColour (juce::TextButton::textColourOffId, tabAActive ? ui::accentFor (a) : ui::secondary);
+    tabB.setColour (juce::TextButton::textColourOffId, tabBActive ? ui::accentFor (b) : ui::secondary);
+    reactionToggle.setColour (juce::TextButton::buttonColourId,
+        reactionPage ? juce::Colour (0xff143f46) : ui::surface);
+    reactionToggle.setColour (juce::TextButton::textColourOffId,
+        reactionPage ? ui::accentFor (0) : ui::secondary);
     enableB.setButtonText (enabled ? ui::word (french, "B ACTIF", "B ON")
                                   : ui::word (french, "B INACTIF", "B OFF"));
     enableB.setColour (juce::TextButton::textColourOffId, enabled ? ui::engaged : ui::secondary);
@@ -741,7 +747,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         reactionToggle.setColour (juce::TextButton::textColourOffId,
             reactionPage ? ui::accentFor (0) : ui::secondary);
         resized();
-        repaint();
+        updateMaterialState();
     };
     enableB.onClick = [this] { setAudioToggle ("enableB", vParam (audio, "enableB") < 0.5f); };
     macroToggle.onClick = [this]
