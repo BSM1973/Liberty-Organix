@@ -50,8 +50,13 @@ juce::Rectangle<float> OrganixMorphPad::field() const
 void OrganixMorphPad::timerCallback()
 {
     if (! isShowing()) return;
-    visualX += (current (audio, "morphX") - visualX) * 0.30f;
-    visualY += (current (audio, "morphY") - visualY) * 0.30f;
+    const bool pathPlaying = current (audio, "trajectoryEnable") > 0.5f;
+    const float x = pathPlaying ? audio.trajectoryReadX.load (std::memory_order_relaxed)
+                                : current (audio, "morphX");
+    const float y = pathPlaying ? audio.trajectoryReadY.load (std::memory_order_relaxed)
+                                : current (audio, "morphY");
+    visualX += (x - visualX) * 0.30f;
+    visualY += (y - visualY) * 0.30f;
     for (int i = static_cast<int> (trace.size()) - 1; i > 0; --i)
         trace[static_cast<size_t> (i)] = trace[static_cast<size_t> (i - 1)];
     trace[0] = {visualX, visualY};
@@ -66,29 +71,86 @@ void OrganixMorphPad::changeXY (juce::Point<float> p)
     if (xParam != nullptr) xParam->setValueNotifyingHost (xParam->convertTo0to1 (x));
     if (yParam != nullptr) yParam->setValueNotifyingHost (yParam->convertTo0to1 (y));
 }
+void OrganixMorphPad::addDrawPoint (juce::Point<float> point)
+{
+    auto region = field();
+    const organix::TrajectoryPoint normalized {
+        juce::jlimit (0.0f, 1.0f, (point.x - region.getX()) / region.getWidth()),
+        juce::jlimit (0.0f, 1.0f, (point.y - region.getY()) / region.getHeight())
+    };
+    if (draft.count > 0)
+    {
+        const auto last = draft.points[static_cast<size_t> (draft.count - 1)];
+        const float dx = normalized.x - last.x, dy = normalized.y - last.y;
+        if (dx * dx + dy * dy < 0.00010f) return;
+    }
+    if (draft.count == organix::TrajectoryPath::maxPoints)
+    {
+        // Preserve first/last direction but downsample in place. No allocation.
+        for (int j = 0; j < organix::TrajectoryPath::maxPoints / 2; ++j)
+            draft.points[static_cast<size_t> (j)] =
+                draft.points[static_cast<size_t> (2 * j)];
+        draft.count = organix::TrajectoryPath::maxPoints / 2;
+    }
+    draft.points[static_cast<size_t> (draft.count++)] = normalized;
+    repaint();
+}
 void OrganixMorphPad::mouseDown (const juce::MouseEvent& event)
 {
     if (! field().expanded (16.0f).contains (event.position)) return;
     dragging = true;
+    if (drawingEnabled)
+    {
+        drafting = true;
+        draft = {};
+        addDrawPoint (event.position);
+        return;
+    }
     if (xParam) xParam->beginChangeGesture();
     if (yParam) yParam->beginChangeGesture();
     changeXY (event.position);
 }
 void OrganixMorphPad::mouseDrag (const juce::MouseEvent& event)
 {
-    if (dragging) changeXY (event.position);
+    if (dragging)
+    {
+        if (drawingEnabled) addDrawPoint (event.position);
+        else changeXY (event.position);
+    }
 }
 void OrganixMorphPad::mouseUp (const juce::MouseEvent&)
 {
     if (! dragging) return;
     dragging = false;
+    if (drafting)
+    {
+        drafting = false;
+        if (draft.count >= 2)
+        {
+            audio.setTrajectoryPath (draft);
+            if (auto* shape = audio.parameters.getParameter ("trajectoryShape"))
+            {
+                shape->beginChangeGesture();
+                shape->setValueNotifyingHost (shape->convertTo0to1 (3.0f));
+                shape->endChangeGesture();
+            }
+            if (auto* enable = audio.parameters.getParameter ("trajectoryEnable"))
+            {
+                enable->beginChangeGesture();
+                enable->setValueNotifyingHost (enable->convertTo0to1 (1.0f));
+                enable->endChangeGesture();
+            }
+        }
+        repaint();
+        return;
+    }
     if (xParam) xParam->endChangeGesture();
     if (yParam) yParam->endChangeGesture();
 }
 void OrganixMorphPad::mouseDoubleClick (const juce::MouseEvent& event)
 {
     if (! field().expanded (16.0f).contains (event.position)) return;
-    changeXY (event.position);
+    if (! drawingEnabled) changeXY (event.position);
 }
 void OrganixMorphPad::paint (juce::Graphics& g)
 {
@@ -105,7 +167,8 @@ void OrganixMorphPad::paint (juce::Graphics& g)
              "DÉPLACEZ LE POINT POUR MÉLANGER QUATRE IDENTITÉS SONORES",
              "DRAG THE POINT TO BLEND FOUR SONIC IDENTITIES"),
            {24, 74, getWidth() - 48, 20}, 10.0f, ui::subdued);
-    const bool enabled = current (audio, "morphEnable") > 0.5f;
+    const bool trajectoryPlaying = current (audio, "trajectoryEnable") > 0.5f;
+    const bool enabled = current (audio, "morphEnable") > 0.5f || trajectoryPlaying;
     label (g, enabled ? ui::word (french, "MORPH ACTIF", "MORPH ACTIVE")
                        : ui::word (french, "MORPH INACTIF", "MORPH OFF"),
            {getWidth() - 198, 42, 174, 21}, 11.0f,
@@ -137,6 +200,38 @@ void OrganixMorphPad::paint (juce::Graphics& g)
     g.setColour (ui::secondary.withAlpha (0.34f));
     g.drawLine (corners[0].x, corners[0].y, corners[3].x, corners[3].y, 0.9f);
     g.drawLine (corners[1].x, corners[1].y, corners[2].x, corners[2].y, 0.9f);
+
+    // Display the actual trajectory curve, not just a cosmetic preset icon.
+    const int shape = juce::jlimit (0, 3,
+        static_cast<int> (current (audio, "trajectoryShape")));
+    const auto path = drafting ? draft : audio.getTrajectoryPath();
+    juce::Path curve;
+    if (drawingEnabled && drafting && path.count > 1)
+    {
+        for (int k = 0; k < path.count; ++k)
+        {
+            const auto p = path.points[static_cast<size_t> (k)];
+            const float xx = r.getX() + r.getWidth() * p.x;
+            const float yy = r.getY() + r.getHeight() * p.y;
+            if (k == 0) curve.startNewSubPath (xx, yy);
+            else curve.lineTo (xx, yy);
+        }
+    }
+    else
+    {
+        for (int k = 0; k <= 128; ++k)
+        {
+            const auto p = organix::TrajectoryDesigner::sample (
+                shape, static_cast<float> (k) / 128.0f, path);
+            const float xx = r.getX() + r.getWidth() * p.x;
+            const float yy = r.getY() + r.getHeight() * p.y;
+            if (k == 0) curve.startNewSubPath (xx, yy);
+            else curve.lineTo (xx, yy);
+        }
+    }
+    g.setColour (ui::accentFor (4).withAlpha (trajectoryPlaying ? 0.65f : 0.35f));
+    g.strokePath (curve, juce::PathStrokeType (2.0f,
+        juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     const auto weights = organix::Morph4D::weights (visualX, visualY);
     for (int i = 0; i < 4; ++i)
@@ -187,9 +282,12 @@ void OrganixMorphPad::paint (juce::Graphics& g)
            juce::String (juce::roundToInt (visualY * 100.0f)) + "%",
            {24, getHeight() - 44, getWidth() - 48, 20}, 12.0f,
            ui::accentFor (0), true, juce::Justification::centred);
-    label (g, ui::word (french,
-             "PARAMÈTRES INTERPOLÉS / MOTEURS FONDUS SANS COUPURE",
-             "INTERPOLATED PARAMETERS / SMOOTH ENGINE CROSSFADES"),
+    label (g, drawingEnabled
+           ? ui::word (french, "DESSIN : GLISSEZ DANS LE CHAMP CENTRAL",
+                             "DRAW: DRAG IN THE CENTRAL FIELD")
+           : ui::word (french,
+             "LA COURBE ANIME LES QUATRE SCÈNES ET LE SON",
+             "THE CURVE DRIVES ALL FOUR SCENES AND THE AUDIO"),
            {24, getHeight() - 24, getWidth() - 48, 16}, 9.0f,
            ui::subdued, false, juce::Justification::centred);
 }

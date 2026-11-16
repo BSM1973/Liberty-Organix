@@ -37,6 +37,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     layout.add (std::make_unique<Bool> (pid ("morphEnable"), "Four Scene Morph Enabled", false));
     add ("morphX", "Four Scene Morph X", 0.0f, 1.0f, 0.0f);
     add ("morphY", "Four Scene Morph Y", 0.0f, 1.0f, 0.0f);
+    // Standalone and DAW-recallable trajectory design, default disabled.
+    layout.add (std::make_unique<Bool> (pid ("trajectoryEnable"), "Trajectory Playback", false));
+    layout.add (std::make_unique<Choice> (pid ("trajectoryShape"),
+        "Trajectory Shape", juce::StringArray {"CIRCLE", "SPIRAL", "ZIGZAG", "FREEHAND"}, 0));
+    add ("trajectorySpeed", "Trajectory Speed", 0.05f, 6.0f, 0.25f);
+    layout.add (std::make_unique<Bool> (pid ("trajectoryFree"), "Trajectory Free Rate", true));
+    layout.add (std::make_unique<Choice> (pid ("trajectoryDivision"),
+        "Trajectory Beat Division",
+        juce::StringArray {"1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T"}, 2));
+    layout.add (std::make_unique<Bool> (pid ("trajectoryReverse"), "Trajectory Reverse", false));
+    add ("trajectoryDepth", "Trajectory XY Depth", 0.0f, 1.0f, 1.0f);
     // Matter DNA: analysis is opt-in to preserve all v0.5 sessions.
     layout.add (std::make_unique<Bool> (pid ("dnaEnable"), "Enable Matter DNA", false));
     add ("dnaDepth", "Matter DNA Depth", 0.0f, 1.0f, 0.50f);
@@ -93,6 +104,10 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     engineB.prepare (sampleRate, getTotalNumInputChannels());
     matterDNA.prepare (sampleRate);
     morphRender.prepare (sampleRate, getTotalNumInputChannels());
+    receivedTrajectoryVersion = 0;
+    trajectoryPhase = 0.0f;
+    smoothTrajectoryX = 0.5f;
+    smoothTrajectoryY = 0.5f;
     receivedVersions.fill (0);
     morphBlendSmooth.reset (sampleRate, 0.085);
     morphXSmooth.reset (sampleRate, 0.080);
@@ -120,6 +135,8 @@ void OrganixAudioProcessor::releaseResources()
     engineB.reset();
     matterDNA.reset();
     morphRender.reset();
+    trajectoryPhase = 0.0f;
+    smoothTrajectoryX = smoothTrajectoryY = 0.5f;
 }
 
 bool OrganixAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -238,9 +255,51 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             receivedVersions[static_cast<size_t> (scene)] = version;
         }
     }
+    // Consume any new freehand shape at block boundaries. Every mailbox
+    // coordinate is atomic, so no ValueTree or UI vector is read by the DSP.
+    const uint32_t trajectoryVersion = trajectoryMailbox.version.load (std::memory_order_acquire);
+    if ((trajectoryVersion & 1u) == 0u &&
+        trajectoryVersion != receivedTrajectoryVersion)
+    {
+        organix::TrajectoryPath candidate;
+        candidate.count = juce::jlimit (0, organix::TrajectoryPath::maxPoints,
+                          trajectoryMailbox.count.load (std::memory_order_relaxed));
+        for (int j = 0; j < candidate.count; ++j)
+        {
+            candidate.points[static_cast<size_t> (j)] = {
+                trajectoryMailbox.x[static_cast<size_t> (j)].load (std::memory_order_relaxed),
+                trajectoryMailbox.y[static_cast<size_t> (j)].load (std::memory_order_relaxed)
+            };
+        }
+        if (trajectoryMailbox.version.load (std::memory_order_acquire) == trajectoryVersion)
+        {
+            candidate.sanitize();
+            audioTrajectory = candidate;
+            receivedTrajectoryVersion = trajectoryVersion;
+        }
+    }
+    const bool trajectoryPlaying = raw (parameters, "trajectoryEnable") > 0.5f;
+    const bool trajectoryFree = raw (parameters, "trajectoryFree") > 0.5f;
+    const bool trajectoryReverse = raw (parameters, "trajectoryReverse") > 0.5f;
+    const int trajectoryShape = juce::jlimit (0, 3, static_cast<int> (
+        raw (parameters, "trajectoryShape")));
+    const int trajectoryDivision = juce::jlimit (0, 6, static_cast<int> (
+        raw (parameters, "trajectoryDivision")));
+    const float trajectoryDepth = juce::jlimit (0.0f, 1.0f,
+        raw (parameters, "trajectoryDepth"));
+    double trajectoryBpm = 120.0;
+    if (trajectoryPlaying && ! trajectoryFree)
+        if (auto* playHead = getPlayHead())
+            if (const auto position = playHead->getPosition())
+                if (const auto bpm = position->getBpm()) trajectoryBpm = *bpm;
+    const float trajectoryHz = organix::TrajectoryDesigner::frequency (
+        trajectoryFree, raw (parameters, "trajectorySpeed"),
+        static_cast<float> (trajectoryBpm), trajectoryDivision);
+    const float trajectoryAlpha = 1.0f - std::exp (-1.0f /
+        (0.007f * static_cast<float> (juce::jmax (1.0, getSampleRate()))));
     const float morphXTarget = raw (parameters, "morphX");
     const float morphYTarget = raw (parameters, "morphY");
-    const bool morphEnabled = raw (parameters, "morphEnable") > 0.5f;
+    const bool morphEnabled = raw (parameters, "morphEnable") > 0.5f || trajectoryPlaying;
     morphBlendSmooth.setTargetValue (morphEnabled ? 1.0f : 0.0f);
     morphXSmooth.setTargetValue (morphXTarget);
     morphYSmooth.setTargetValue (morphYTarget);
@@ -258,9 +317,16 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             morphDNA.energyMotion = raw (parameters, "dnaEnergyMotion");
             morphDNA.spectralTone = raw (parameters, "dnaSpectralTone");
         }
-        morphRender.configure (morphXSmooth.getCurrentValue(),
-                               morphYSmooth.getCurrentValue(),
-                               dnaFeatures, morphDNA);
+        const auto currentXY = organix::TrajectoryDesigner::sample (
+            trajectoryShape, trajectoryReverse ? 1.0f - trajectoryPhase : trajectoryPhase,
+            audioTrajectory);
+        const auto configureXY = trajectoryPlaying
+            ? organix::TrajectoryDesigner::blend (
+                {morphXSmooth.getCurrentValue(), morphYSmooth.getCurrentValue()},
+                currentXY, trajectoryDepth)
+            : organix::TrajectoryPoint {morphXSmooth.getCurrentValue(),
+                                        morphYSmooth.getCurrentValue()};
+        morphRender.configure (configureXY.x, configureXY.y, dnaFeatures, morphDNA);
     }
 
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
@@ -306,8 +372,25 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float gain = outputSmooth.getNextValue();
         const float width = widthSmooth.getNextValue();
         const float morphFraction = morphBlendSmooth.getNextValue();
-        const float morphX = morphXSmooth.getNextValue();
-        const float morphY = morphYSmooth.getNextValue();
+        float morphX = morphXSmooth.getNextValue();
+        float morphY = morphYSmooth.getNextValue();
+        if (trajectoryPlaying)
+        {
+            const float phase = trajectoryReverse ? 1.0f - trajectoryPhase : trajectoryPhase;
+            const auto p = organix::TrajectoryDesigner::sample (
+                trajectoryShape, phase, audioTrajectory);
+            smoothTrajectoryX += (p.x - smoothTrajectoryX) * trajectoryAlpha;
+            smoothTrajectoryY += (p.y - smoothTrajectoryY) * trajectoryAlpha;
+            const auto driven = organix::TrajectoryDesigner::blend (
+                {morphX, morphY}, {smoothTrajectoryX, smoothTrajectoryY},
+                trajectoryDepth);
+            morphX = driven.x;
+            morphY = driven.y;
+            trajectoryPhase = organix::TrajectoryDesigner::advance (
+                trajectoryPhase, trajectoryHz, getSampleRate());
+        }
+        trajectoryReadX.store (morphX, std::memory_order_relaxed);
+        trajectoryReadY.store (morphY, std::memory_order_relaxed);
         float originals[2] = {0.0f, 0.0f};
         float inputs[2] = {0.0f, 0.0f};
         float processed[2] = {0.0f, 0.0f};
@@ -430,6 +513,13 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("morphEnable", 0.0f);
     setParameter ("morphX", 0.0f);
     setParameter ("morphY", 0.0f);
+    setParameter ("trajectoryEnable", 0.0f);
+    setParameter ("trajectoryShape", 0.0f);
+    setParameter ("trajectorySpeed", 0.25f);
+    setParameter ("trajectoryFree", 1.0f);
+    setParameter ("trajectoryDivision", 2.0f);
+    setParameter ("trajectoryReverse", 0.0f);
+    setParameter ("trajectoryDepth", 1.0f);
     // Safe neutral recall: v0.5 factory presets remain unchanged by Matter DNA.
     setParameter ("dnaEnable", 0.0f);
     setParameter ("dnaDepth", 0.5f);
@@ -462,6 +552,7 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     currentPreset.store (index);
     // New factory patch starts with all four scenes matching its sound.
     for (int i = 0; i < 4; ++i) captureMorphScene (i);
+    setTrajectoryPath ({}, true);
 }
 
 organix::MorphScene OrganixAudioProcessor::captureCurrentMorphScene() const noexcept
@@ -566,6 +657,77 @@ organix::MorphScene OrganixAudioProcessor::readMorphScene (int index) const noex
     return versionBefore == versionAfter ? organix::MorphScene::unpack (values)
                                          : organix::MorphScene {};
 }
+juce::String OrganixAudioProcessor::encodeTrajectory (const organix::TrajectoryPath& source)
+{
+    auto path = source;
+    path.sanitize();
+    juce::StringArray chunks;
+    for (int i = 0; i < path.count; ++i)
+    {
+        const auto p = path.points[static_cast<size_t> (i)];
+        chunks.add (juce::String (p.x, 6) + "," + juce::String (p.y, 6));
+    }
+    return chunks.joinIntoString (";");
+}
+bool OrganixAudioProcessor::decodeTrajectory (const juce::String& content,
+                                               organix::TrajectoryPath& path)
+{
+    path = {};
+    if (content.trim().isEmpty()) return true;
+    const auto points = juce::StringArray::fromTokens (content, ";", "");
+    if (points.size() < 2 || points.size() > organix::TrajectoryPath::maxPoints) return false;
+    for (const auto& token : points)
+    {
+        const auto first = token.upToFirstOccurrenceOf (",", false, false).trim();
+        const auto second = token.fromFirstOccurrenceOf (",", false, false).trim();
+        if (first.isEmpty() || second.isEmpty() ||
+            ! first.containsOnly ("-+.0123456789eE") ||
+            ! second.containsOnly ("-+.0123456789eE")) return false;
+        const auto x = first.getDoubleValue(), y = second.getDoubleValue();
+        if (! std::isfinite (x) || ! std::isfinite (y)) return false;
+        path.points[static_cast<size_t> (path.count++)] = {
+            static_cast<float> (x), static_cast<float> (y)
+        };
+    }
+    path.sanitize();
+    return true;
+}
+void OrganixAudioProcessor::setTrajectoryPath (organix::TrajectoryPath path, bool persist)
+{
+    path.sanitize();
+    auto& slot = trajectoryMailbox;
+    slot.version.fetch_add (1, std::memory_order_acq_rel);
+    slot.count.store (path.count, std::memory_order_relaxed);
+    for (int i = 0; i < path.count; ++i)
+    {
+        const auto& p = path.points[static_cast<size_t> (i)];
+        slot.x[static_cast<size_t> (i)].store (p.x, std::memory_order_relaxed);
+        slot.y[static_cast<size_t> (i)].store (p.y, std::memory_order_relaxed);
+    }
+    slot.version.fetch_add (1, std::memory_order_release);
+    if (persist)
+        parameters.state.setProperty ("trajectoryPoints", encodeTrajectory (path), nullptr);
+}
+organix::TrajectoryPath OrganixAudioProcessor::getTrajectoryPath() const noexcept
+{
+    organix::TrajectoryPath path;
+    const auto& slot = trajectoryMailbox;
+    const uint32_t v1 = slot.version.load (std::memory_order_acquire);
+    if ((v1 & 1u) != 0u) return path;
+    path.count = juce::jlimit (0, organix::TrajectoryPath::maxPoints,
+                               slot.count.load (std::memory_order_relaxed));
+    for (int i = 0; i < path.count; ++i)
+    {
+        path.points[static_cast<size_t> (i)].x =
+            slot.x[static_cast<size_t> (i)].load (std::memory_order_relaxed);
+        path.points[static_cast<size_t> (i)].y =
+            slot.y[static_cast<size_t> (i)].load (std::memory_order_relaxed);
+    }
+    if (v1 != slot.version.load (std::memory_order_acquire)) return {};
+    path.sanitize();
+    return path;
+}
+
 void OrganixAudioProcessor::goToMorphScene (int index)
 {
     if (index < 0 || index >= 4) return;
@@ -595,6 +757,11 @@ void OrganixAudioProcessor::setStateInformation (const void* data, int size)
             auto state = juce::ValueTree::fromXml (*xml);
             currentPreset.store (juce::jlimit (0, 99, static_cast<int> (state.getProperty ("factoryPresetIndex", 0))));
             parameters.replaceState (state);
+            organix::TrajectoryPath restoredPath;
+            if (decodeTrajectory (state.getProperty ("trajectoryPoints").toString(), restoredPath))
+                setTrajectoryPath (restoredPath, false);
+            else
+                setTrajectoryPath ({}, false);
             for (int index = 0; index < 4; ++index)
             {
                 organix::MorphScene snapshot;

@@ -95,6 +95,14 @@ static bool accepts (int width, int height)
     if (fieldWidth < 400 || fieldHeight < 180 ||
         morphCardWidth < 240 || morphButtonWidth < 100 ||
         g.footer.h - 45 < 110) return false;
+    // Trajectory Designer occupies the same right panel as 12 material
+    // controls, but never at the same time. Its 436px tall control column
+    // must fit at the minimum editor height and leave footer separation.
+    const int trajectoryRightPadding = 16;
+    const int trajectoryBottom = 436;
+    const int trajectoryControlWidth = g.right.w - 2 * trajectoryRightPadding;
+    if (trajectoryControlWidth < 300 || trajectoryBottom > g.right.h - 22 ||
+        g.right.intersects (g.center) || g.right.intersects (g.footer)) return false;
     return true;
 }
 int main()

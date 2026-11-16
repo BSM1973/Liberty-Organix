@@ -6,6 +6,7 @@
 #include "OrganixMovement.h"
 #include "MatterDNAModulation.h"
 #include "OrganixMorph4D.h"
+#include "OrganixTrajectory.h"
 #include <array>
 #include <cstdint>
 #include <atomic>
@@ -38,6 +39,9 @@ public:
     // Message-thread capture/recall. Audio reads only atomic published values.
     void captureMorphScene (int index);
     void goToMorphScene (int index);
+    void setTrajectoryPath (organix::TrajectoryPath path, bool persist = true);
+    organix::TrajectoryPath getTrajectoryPath() const noexcept;
+    std::atomic<float> trajectoryReadX {0.5f}, trajectoryReadY {0.5f};
     organix::MorphScene readMorphScene (int index) const noexcept;
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float> inputRms {0.0f};
@@ -64,6 +68,19 @@ private:
     };
     std::array<SceneMailbox,4> morphMailbox {};
     std::array<uint32_t,4> receivedVersions {};
+    struct TrajectoryMailbox
+    {
+        std::atomic<uint32_t> version {0};
+        std::atomic<int> count {0};
+        std::array<std::atomic<float>, organix::TrajectoryPath::maxPoints> x {};
+        std::array<std::atomic<float>, organix::TrajectoryPath::maxPoints> y {};
+    };
+    TrajectoryMailbox trajectoryMailbox;
+    organix::TrajectoryPath audioTrajectory;
+    uint32_t receivedTrajectoryVersion = 0;
+    float trajectoryPhase = 0.0f, smoothTrajectoryX = 0.5f, smoothTrajectoryY = 0.5f;
+    static juce::String encodeTrajectory (const organix::TrajectoryPath& path);
+    static bool decodeTrajectory (const juce::String& string, organix::TrajectoryPath& path);
     void publishMorphScene (int index, organix::MorphScene scene,
                             bool persist);
     organix::MorphScene captureCurrentMorphScene() const noexcept;
