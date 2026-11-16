@@ -269,6 +269,20 @@ void MorphRender::processFrame (const float in[2], float out[2], int channels,
         }
     }
 }
+float MorphRender::wetAt (const std::array<float,4>& weights) const noexcept
+{
+    float value = 0.0f;
+    for (int i = 0; i < 4; ++i)
+        value += weights[static_cast<size_t> (i)] * target[static_cast<size_t> (i)].wet;
+    return std::clamp (value, 0.0f, 1.0f);
+}
+float MorphRender::widthAt (const std::array<float,4>& weights) const noexcept
+{
+    float value = 0.0f;
+    for (int i = 0; i < 4; ++i)
+        value += weights[static_cast<size_t> (i)] * target[static_cast<size_t> (i)].width;
+    return std::clamp (value, 0.0f, 2.0f);
+}
 bool MorphRender::hasPendingTransition (int scene) const noexcept
 {
     return scene >= 0 && scene < 4 && transitioning[static_cast<size_t> (scene)];
