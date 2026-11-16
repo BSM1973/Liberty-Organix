@@ -25,13 +25,21 @@ struct Parameters
                                    0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f }};
 };
 
+struct ReactionDrive
+{
+    float slow = 0.0f;       // slows modulating oscillator rates
+    float excite = 0.0f;     // signed injection into resonator
+    float disperse = 0.0f;   // grain scatter / light diffusing tap
+    float colour = 0.0f;     // limited tonal coloration
+};
+
 class MaterialDSP
 {
 public:
     void prepare (double sampleRate, int channels);
     void reset() noexcept;
     void configure (Material newMaterial, Parameters newParams) noexcept;
-    float process (int channel, float input) noexcept;
+    float process (int channel, float input, ReactionDrive reaction = {}) noexcept;
 
 private:
     static constexpr int maxChannels = 2;
@@ -74,12 +82,12 @@ private:
     float readAt (const ChannelState& s, float index) const noexcept;
     float random01 (ChannelState& s) const noexcept;
     float exciteModes (ChannelState& s, float excitation, bool metallic) noexcept;
-    float liquid (ChannelState& s, float x) noexcept;
-    float crystal (ChannelState& s, float x) noexcept;
-    float plasma (ChannelState& s, float x) noexcept;
-    float vapor (ChannelState& s, float x) noexcept;
-    float metal (ChannelState& s, float x) noexcept;
-    float light (ChannelState& s, float x) noexcept;
+    float liquid (ChannelState& s, float x, ReactionDrive reaction) noexcept;
+    float crystal (ChannelState& s, float x, ReactionDrive reaction) noexcept;
+    float plasma (ChannelState& s, float x, ReactionDrive reaction) noexcept;
+    float vapor (ChannelState& s, float x, ReactionDrive reaction) noexcept;
+    float metal (ChannelState& s, float x, ReactionDrive reaction) noexcept;
+    float light (ChannelState& s, float x, ReactionDrive reaction) noexcept;
     void updateModes() noexcept;
 
     std::array<ChannelState, maxChannels> state {};
