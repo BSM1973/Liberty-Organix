@@ -868,7 +868,14 @@ void OrganixAudioProcessorEditor::resized()
     auto headActions = headerBounds;
     macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
-    language.setBounds (headActions.removeFromRight (127).reduced (8, 25));
+    auto languageArea = headActions.removeFromRight (127).reduced (8, 25);
+    const int langHalf = languageArea.getWidth() / 2;
+    languageFR.setBounds (languageArea.getX(), languageArea.getY(),
+                          langHalf - 2, languageArea.getHeight());
+    languageEN.setBounds (languageArea.getX() + langHalf + 2,
+                          languageArea.getY(),
+                          languageArea.getWidth() - langHalf - 2,
+                          languageArea.getHeight());
     headActions.removeFromRight (8);
     // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
     auto controlsRect = headActions.removeFromRight (juce::jmin (485, headActions.getWidth() - 315));
@@ -919,6 +926,12 @@ void OrganixAudioProcessorEditor::resized()
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
         routeSelector.setVisible (false);
+        for (auto* c : { static_cast<juce::Component*> (&motionFreeButton),
+                         static_cast<juce::Component*> (&trajectorySelect),
+                         static_cast<juce::Component*> (&divisionSelect),
+                         static_cast<juce::Component*> (&trajectoryLabel),
+                         static_cast<juce::Component*> (&divisionLabel) })
+            c->setVisible (false);
     }
     else
     {
@@ -928,19 +941,57 @@ void OrganixAudioProcessorEditor::resized()
         }
         // All three panel bounds come from the shared, unit-tested geometry model.
         routeSelector.setVisible (true);
-        routeSelector.setBounds (footerFusion.getRight() - 252, footerFusion.getY() + 8, 240, 63);
-        for (int i = 0; i < 7; ++i)
+        routeSelector.setBounds (footerFusion.getRight() - 252,
+                                 footerFusion.getY() + 8, 240, 63);
+        for (auto* c : { static_cast<juce::Component*> (&motionFreeButton),
+                         static_cast<juce::Component*> (&trajectorySelect),
+                         static_cast<juce::Component*> (&divisionSelect),
+                         static_cast<juce::Component*> (&trajectoryLabel),
+                         static_cast<juce::Component*> (&divisionLabel) })
+            c->setVisible (true);
+
+        const int movementChoiceWidth = juce::jlimit (
+            140, 170, juce::roundToInt (footerMotion.getWidth() * 0.45f));
+        const int movementChoiceX = footerMotion.getRight() - movementChoiceWidth - 12;
+        motionFreeButton.setBounds (footerMotion.getRight() - 87,
+                                    footerMotion.getY() + 10, 74, 25);
+        trajectoryLabel.setBounds (movementChoiceX, footerMotion.getY() + 42,
+                                   movementChoiceWidth, 17);
+        trajectorySelect.setBounds (movementChoiceX, footerMotion.getY() + 61,
+                                    movementChoiceWidth, 29);
+        divisionLabel.setBounds (movementChoiceX, footerMotion.getY() + 98,
+                                 movementChoiceWidth, 16);
+        divisionSelect.setBounds (movementChoiceX, footerMotion.getY() + 116,
+                                  movementChoiceWidth, 29);
+
+        for (int i = 0; i < 8; ++i)
         {
             auto& d = bottom[static_cast<size_t> (i)];
             d.slider.setVisible (true);
             d.label.setVisible (true);
-            const auto region = i < 3 ? footerFusion : i < 5 ? footerMotion : footerOutput;
-            const int count = i < 3 ? 3 : 2;
-            const int offset = i < 3 ? i : i < 5 ? i - 3 : i - 5;
-            const int cellW = (region.getWidth() - 24) / count;
-            const int top = i < 3 ? 76 : 57;
-            layoutDial (d, { region.getX() + 12 + offset * cellW,
-                             region.getY() + top, cellW, region.getHeight() - top - 5 });
+            d.value.setVisible (true);
+            if (i < 3)
+            {
+                const int cellW = (footerFusion.getWidth() - 24) / 3;
+                layoutDial (d, { footerFusion.getX() + 12 + i * cellW,
+                                 footerFusion.getY() + 76,
+                                 cellW, footerFusion.getHeight() - 81 });
+            }
+            else if (i < 5)
+            {
+                const int left = footerMotion.getX() + 10;
+                const int cellW = (movementChoiceX - left - 4) / 2;
+                layoutDial (d, { left + (i - 3) * cellW,
+                                 footerMotion.getY() + 57,
+                                 cellW, footerMotion.getHeight() - 62 });
+            }
+            else
+            {
+                const int cellW = (footerOutput.getWidth() - 24) / 3;
+                layoutDial (d, { footerOutput.getX() + 12 + (i - 5) * cellW,
+                                 footerOutput.getY() + 57,
+                                 cellW, footerOutput.getHeight() - 62 });
+            }
         }
     }
     if (browser != nullptr) browser->setBounds (getLocalBounds());
@@ -949,6 +1000,7 @@ void OrganixAudioProcessorEditor::timerCallback()
 {
     refreshPreset();
     routeSelector.refresh();
+    refreshMovementState();
     const int a = activeMaterial (0), b = activeMaterial (1);
     const int signature = a + 6 * b + 36 * selectedLayer +
                           (vParam (audio, "enableB") > 0.5f ? 72 : 0) +
