@@ -328,17 +328,21 @@ void OrganixAudioProcessorEditor::drawText (juce::Graphics& g, const juce::Strin
 }
 void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
                                                 const juce::String& label, juce::Colour accent,
-                                                bool percent)
+                                                bool percent, int unitMode)
 {
     dial.percent = percent;
+    dial.unitMode = unitMode >= 0 ? unitMode : (percent ? 0 : 1);
     dial.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     dial.slider.setRotaryParameters (pi * 1.25f, pi * 2.75f, true);
     dial.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    dial.slider.setDoubleClickReturnValue (true, percent ? 0.5 : 0.0);
+    const double resetValue = dial.unitMode == 3 ? 1.0
+                            : dial.unitMode == 2 ? 0.25
+                            : dial.unitMode == 0 ? 0.5 : 0.0;
+    dial.slider.setDoubleClickReturnValue (true, resetValue);
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
-    dial.slider.setTooltip (label + " — drag to adjust, double-click to reset");
+    dial.slider.setTooltip (label + " - drag to adjust; double-click to reset");
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
@@ -351,24 +355,28 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.value.setColour (juce::Label::textColourId, accent);
     dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
     dial.value.setEditable (true, true, false);
-    dial.value.setTooltip ("Click to type an exact value");
+    dial.value.setTooltip ("Click to enter an exact value");
     dial.value.onTextChange = [&dial]
     {
         double value = dial.value.getText().getDoubleValue();
-        if (dial.percent) value /= 100.0;
+        if (dial.unitMode == 0 || dial.unitMode == 3) value /= 100.0;
         dial.slider.setValue (juce::jlimit (dial.slider.getMinimum(),
                                           dial.slider.getMaximum(), value),
                               juce::sendNotificationSync);
     };
     dial.slider.onValueChange = [&dial]
     {
-        const auto value = dial.slider.getValue();
-        const auto text = dial.percent
-            ? juce::String (juce::roundToInt (value * 100.0)) + "%"
-            : juce::String (value, 1) + " dB";
+        const double value = dial.slider.getValue();
+        juce::String text;
+        switch (dial.unitMode)
+        {
+            case 0:
+            case 3: text = juce::String (juce::roundToInt (value * 100.0)) + "%"; break;
+            case 2: text = juce::String (value, 2) + " Hz"; break;
+            default: text = juce::String (value, 1) + " dB"; break;
+        }
         dial.value.setText (text, juce::dontSendNotification);
     };
-
     addAndMakeVisible (dial.slider);
     addAndMakeVisible (dial.label);
     addAndMakeVisible (dial.value);
