@@ -43,8 +43,12 @@ inline void applyMatterDNA (Material material, Parameters& p,
     if (material == Material::Crystal)
     {
         const float attack = safe (features.transient);
+        // The current Crystal engine uses energy for resonator excitation;
+        // unlike the other engines it does not consume p.motion directly.
+        // Route a small, bounded part of analyzed motion to that excitation.
         p.energy = safe (p.energy +
-            depth * safe (controls.crystalAttack) * attack * 0.8f);
+            depth * (safe (controls.crystalAttack) * attack * 0.8f +
+                     safe (controls.energyMotion) * evolving * 0.22f));
         p.amount = safe (p.amount +
             depth * safe (controls.crystalAttack) * attack * 0.30f);
     }
