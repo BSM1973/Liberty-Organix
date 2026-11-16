@@ -683,8 +683,10 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                     static_cast<float> (headerBounds.getY() + 45 + i * 7),
                     static_cast<float> (headerBounds.getX() + 43),
                     static_cast<float> (headerBounds.getY() + 45 + i * 7), 1.1f);
-    title (g, "TEXTURE LIBRARY  /  100 FACTORY STARTING POINTS",
-           { presets.getX(), presets.getBottom() + 3, presets.getWidth(), 17 },
+    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D’USINE + PRESETS PERSONNELS",
+                                "LIBRARY  /  100 FACTORY + USER PRESETS"),
+           { presetDisplay.getX(), presetDisplay.getBottom() + 3,
+             presetDisplay.getWidth() + browserButton.getWidth(), 17 },
            9.0f, ui::subdued, false);
     g.setColour (ui::line); g.drawLine (static_cast<float> (margin.getX()),
                                        static_cast<float> (headerBounds.getBottom() + 2),
@@ -699,29 +701,29 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
         ui::drawPanel (g, footerMotion);
         ui::drawPanel (g, footerOutput);
     }
-    title (g, "MATERIAL ENGINES", { leftBounds.getX() + 14, leftBounds.getY() + 15, leftBounds.getWidth() - 27, 21 },
+    title (g, ui::word (french, "MOTEURS DE MATÉRIAUX", "MATERIAL ENGINES"), { leftBounds.getX() + 14, leftBounds.getY() + 15, leftBounds.getWidth() - 27, 21 },
            10.0f, ui::secondary, true);
-    title (g, "EDITING LAYER " + juce::String (selectedLayer == 0 ? "A" : "B"),
+    title (g, ui::word (french, "ÉDITION COUCHE ", "EDITING LAYER ") + juce::String (selectedLayer == 0 ? "A" : "B"),
            { leftBounds.getX() + 14, leftBounds.getY() + 41, leftBounds.getWidth() - 28, 20 },
            10.0f, ui::subdued);
     const int current = activeMaterial (selectedLayer);
     // The active material stripe, icon and layer badges are drawn by MaterialButton.
     g.setColour (ui::engaged); g.fillEllipse (static_cast<float> (leftBounds.getX() + 16),
                               static_cast<float> (leftBounds.getBottom() - 37), 4.0f, 4.0f);
-    title (g, "SIX LIVE PROCESSORS",
+    title (g, ui::word (french, "SIX MOTEURS ACTIFS", "SIX LIVE PROCESSORS"),
            { leftBounds.getX() + 27, leftBounds.getBottom() - 43, leftBounds.getWidth() - 35, 20 },
            9.0f, ui::subdued, true);
 
-    title (g, "MATERIAL PROPERTIES", { rightBounds.getX() + 19, rightBounds.getY() + 61,
+    title (g, ui::word (french, "PROPRIÉTÉS DU MATÉRIAU", "MATERIAL PROPERTIES"), { rightBounds.getX() + 19, rightBounds.getY() + 61,
                                       rightBounds.getWidth() - 38, 18 },
            10.0f, ui::secondary, true);
-    title (g, ui::name[static_cast<size_t> (current)],
+    title (g, ui::materialLabel (current, french),
            { rightBounds.getX() + 19, rightBounds.getY() + 81, rightBounds.getWidth() - 38, 35 },
            26.0f, ui::accentFor (current));
-    title (g, ui::description[static_cast<size_t> (current)],
+    title (g, ui::materialDescription (current, french),
            { rightBounds.getX() + 19, rightBounds.getY() + 117, rightBounds.getWidth() - 38, 20 },
            11.0f, ui::secondary);
-    title (g, "SOURCE-DRIVEN  /  12 LIVE PARAMETERS",
+    title (g, ui::word (french, "12 PARAMÈTRES AUDIO AUTOMATISABLES", "12 AUTOMATABLE AUDIO PARAMETERS"),
            { rightBounds.getX() + 18, rightBounds.getBottom() - 27, rightBounds.getWidth() - 36, 19 },
            9.0f, ui::subdued, true, juce::Justification::centred);
     g.setColour (ui::line);
@@ -729,24 +731,25 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                 static_cast<float> (rightBounds.getRight() - 17), static_cast<float> (rightBounds.getBottom() - 33), 1.0f);
 
     if (macroPage)
-        title (g, "EIGHT PERFORMANCE MACROS", { footerAll.getX() + 17, footerAll.getY() + 11,
+        title (g, ui::word (french, "HUIT MACROS DE PERFORMANCE", "EIGHT PERFORMANCE MACROS"), { footerAll.getX() + 17, footerAll.getY() + 11,
                                                 footerAll.getWidth() - 34, 24 }, 11.0f, ui::secondary, true);
     else
     {
-        title (g, "DUAL FUSION", { footerFusion.getX() + 17, footerFusion.getY() + 13, 210, 20 },
+        title (g, ui::word (french, "FUSION DES MATÉRIAUX", "DUAL FUSION"), { footerFusion.getX() + 17, footerFusion.getY() + 13, 210, 20 },
                11.0f, ui::secondary, true);
-        title (g, "MOVEMENT", { footerMotion.getX() + 17, footerMotion.getY() + 13, 200, 20 },
+        title (g, ui::word (french, "MOUVEMENT", "MOVEMENT"), { footerMotion.getX() + 17, footerMotion.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
-        title (g, "SIGNAL & OUTPUT", { footerOutput.getX() + 17, footerOutput.getY() + 13, 200, 20 },
+        title (g, ui::word (french, "SIGNAL & SORTIE", "SIGNAL & OUTPUT"), { footerOutput.getX() + 17, footerOutput.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
         const auto da = activeMaterial (0), db = activeMaterial (1);
-        title (g, "A / " + juce::String (ui::name[static_cast<size_t> (da)]) +
-                  "     +     B / " + ui::name[static_cast<size_t> (db)],
-               { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 36, 18 },
+        title (g, "A / " + ui::materialLabel (da, french) +
+                  "   +   B / " + ui::materialLabel (db, french),
+               { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 270, 18 },
                10.0f, ui::secondary);
     }
     // Deliberate visual breathing room below the three operational cards.
-    title (g, "Shape Sound. Transform Matter. Create the Impossible.",
+    title (g, ui::word (french, "Façonnez le son. Transformez la matière.",
+                               "Shape Sound. Transform Matter. Create the Impossible."),
            { 23, footerAll.getBottom() + 6, juce::jmin (600, getWidth() - 46), 17 },
            10.0f, ui::subdued);
     title (g, "LIBERTY MUSIC SOFTWARE   /   CORE EDITION",
@@ -772,14 +775,16 @@ void OrganixAudioProcessorEditor::resized()
     visualizer.setBounds (centerBounds);
 
     auto headActions = headerBounds;
-    macroToggle.setBounds (headActions.removeFromRight (85).reduced (4, 25));
+    macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
-    headActions.removeFromRight (10);
-    const int presetWidth = juce::jmin (390, juce::jmax (210, headActions.getWidth() - 310));
-    auto controlsRect = headActions.removeFromRight (presetWidth);
-    next.setBounds (controlsRect.removeFromRight (35).reduced (2, 25));
-    previous.setBounds (controlsRect.removeFromLeft (35).reduced (2, 25));
-    presets.setBounds (controlsRect.reduced (3, 25));
+    language.setBounds (headActions.removeFromRight (127).reduced (8, 25));
+    headActions.removeFromRight (8);
+    // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
+    auto controlsRect = headActions.removeFromRight (juce::jmin (485, headActions.getWidth() - 315));
+    browserButton.setBounds (controlsRect.removeFromRight (111).reduced (3, 25));
+    next.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
+    previous.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
+    presetDisplay.setBounds (controlsRect.reduced (3, 25));
 
     const auto leftPad = leftBounds.reduced (12, 8);
     const int buttonsY = leftBounds.getY() + 72;
@@ -822,7 +827,7 @@ void OrganixAudioProcessorEditor::resized()
         {
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
-        routing.setVisible (false);
+        routeSelector.setVisible (false);
     }
     else
     {
@@ -831,8 +836,8 @@ void OrganixAudioProcessorEditor::resized()
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
         // All three panel bounds come from the shared, unit-tested geometry model.
-        routing.setVisible (true);
-        routing.setBounds (footerFusion.getRight() - 174, footerFusion.getY() + 10, 158, 28);
+        routeSelector.setVisible (true);
+        routeSelector.setBounds (footerFusion.getRight() - 252, footerFusion.getY() + 8, 240, 63);
         for (int i = 0; i < 7; ++i)
         {
             auto& d = bottom[static_cast<size_t> (i)];
@@ -842,10 +847,12 @@ void OrganixAudioProcessorEditor::resized()
             const int count = i < 3 ? 3 : 2;
             const int offset = i < 3 ? i : i < 5 ? i - 3 : i - 5;
             const int cellW = (region.getWidth() - 24) / count;
+            const int top = i < 3 ? 76 : 57;
             layoutDial (d, { region.getX() + 12 + offset * cellW,
-                             region.getY() + 57, cellW, region.getHeight() - 62 });
+                             region.getY() + top, cellW, region.getHeight() - top - 5 });
         }
     }
+    if (browser != nullptr) browser->setBounds (getLocalBounds());
 }
 void OrganixAudioProcessorEditor::timerCallback()
 {
