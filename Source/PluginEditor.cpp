@@ -406,12 +406,15 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.attachment.reset();
         const auto suffix = juce::String (i + 1).paddedLeft ('0', 2);
         const auto parameterId = juce::String (selectedLayer == 0 ? "aShape" : "bShape") + suffix;
-        dial.label.setText (ui::controls[static_cast<size_t> (id)][static_cast<size_t> (i)], juce::dontSendNotification);
+        dial.label.setText (ui::property (id, i, french), juce::dontSendNotification);
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
-        dial.slider.setTooltip (dial.label.getText() + " — " + (selectedLayer == 0 ? "Layer A" : "Layer B") +
-                                " (automatable, double-click to reset)");
+        dial.slider.setTooltip (dial.label.getText() + " — " +
+                ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
+                                  selectedLayer == 0 ? "Layer A" : "Layer B") +
+                ui::word (french, " · automatisable, double-clic : réinitialiser",
+                                  " · automatable, double-click: reset"));
         dial.slider.onValueChange();
     }
 }
@@ -427,10 +430,12 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
     tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
     tabB.setColour (juce::TextButton::textColourOffId, selectedLayer == 1 ? ui::accentFor (b) : ui::secondary);
-    enableB.setButtonText (enabled ? "B ON" : "B OFF");
+    enableB.setButtonText (enabled ? ui::word (french, "B ACTIF", "B ON")
+                                  : ui::word (french, "B INACTIF", "B OFF"));
     enableB.setColour (juce::TextButton::textColourOffId, enabled ? ui::engaged : ui::secondary);
     const bool bypassed = vParam (audio, "bypass") > 0.5f;
-    engaged.setButtonText (bypassed ? "BYPASSED" : "ENGAGED");
+    engaged.setButtonText (bypassed ? ui::word (french, "DÉSACTIVÉ", "BYPASSED")
+                                  : ui::word (french, "ACTIVÉ", "ENGAGED"));
     engaged.setColour (juce::TextButton::buttonColourId, bypassed ? ui::surface : juce::Colour (0xff11352f));
     engaged.setColour (juce::TextButton::textColourOffId, bypassed ? ui::secondary : ui::engaged);
     for (auto& dial : properties)
@@ -440,7 +445,7 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     }
     for (int i = 0; i < 12; ++i)
         properties[static_cast<size_t> (i)].label.setText (
-            ui::controls[static_cast<size_t> (selected)][static_cast<size_t> (i)], juce::dontSendNotification);
+            ui::property (selected, i, french), juce::dontSendNotification);
     visualizer.setLayer (selectedLayer);
     repaint();
 }
@@ -476,13 +481,67 @@ void OrganixAudioProcessorEditor::setAudioToggle (const char* id, bool enabled)
 }
 void OrganixAudioProcessorEditor::refreshPreset()
 {
-    const int index = audio.currentPreset.load (std::memory_order_relaxed);
-    if (index >= 0 && index < 100 && presets.getSelectedId() != index + 1)
-        presets.setSelectedId (index + 1, juce::dontSendNotification);
+    const int idx = juce::jlimit (0, 99, audio.currentPreset.load (std::memory_order_relaxed));
+    if (lastFactoryPreset != idx)
+    {
+        lastFactoryPreset = idx;
+        currentPresetName = audio.getProgramName (idx);
+    }
+    presetDisplay.setButtonText (currentPresetName.isNotEmpty() ? currentPresetName : audio.getProgramName (idx));
+}
+void OrganixAudioProcessorEditor::openBrowser()
+{
+    if (browser == nullptr) return;
+    browser->setFrench (french);
+    browser->setBounds (getLocalBounds());
+    browser->setVisible (true);
+    browser->toFront (true);
+}
+void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
+{
+    french = useFrench;
+    if (uiSettings != nullptr)
+    {
+        uiSettings->setValue ("language", french ? "fr" : "en");
+        uiSettings->saveIfNeeded();
+    }
+    visualizer.setFrench (french);
+    routeSelector.setFrench (french);
+    if (browser != nullptr) browser->setFrench (french);
+    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
+    macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
+                                       : ui::word (french, "MACROS", "MACROS"));
+    tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
+    tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
+    constexpr const char* frBottom[] = {
+        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "ÉVOLUTION", "ENTRÉE", "SORTIE"
+    };
+    constexpr const char* enBottom[] = {
+        "FUSION", "BALANCE", "DRY / WET", "MOTION", "EVOLUTION", "INPUT", "OUTPUT"
+    };
+    for (int i = 0; i < 7; ++i)
+        bottom[static_cast<size_t> (i)].label.setText (
+            juce::String::fromUTF8 (french ? frBottom[i] : enBottom[i]), juce::dontSendNotification);
+    constexpr const char* frMacros[] = {
+        "TRANSFORMER", "MOUVEMENT", "ÉNERGIE", "DENSITÉ",
+        "ESPACE", "HARMONIQUES", "ÉVOLUTION", "FUSION"
+    };
+    constexpr const char* enMacros[] = {
+        "TRANSFORM", "MOTION", "ENERGY", "DENSITY",
+        "SPACE", "HARMONICS", "EVOLUTION", "FUSION"
+    };
+    for (int i = 0; i < 8; ++i)
+        macros[static_cast<size_t> (i)].label.setText (
+            juce::String::fromUTF8 (french ? frMacros[i] : enMacros[i]), juce::dontSendNotification);
+    for (auto& card : materialButtons) card.setFrench (french);
+    bindProperties();
+    updateMaterialState();
+    repaint();
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p)
+    : AudioProcessorEditor (&p), audio (p), visualizer (p), routeSelector (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (visualizer);
@@ -494,36 +553,62 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         button.onClick = [this, i] { selectMaterial (i); };
         addAndMakeVisible (button);
     }
-    for (int i = 0; i < 100; ++i)
+    uiSettings = std::make_unique<juce::PropertiesFile> (ui::preferenceOptions());
+    french = uiSettings->getValue ("language", "fr") != "en";
+    currentPresetName = audio.getProgramName (audio.currentPreset.load());
+    lastFactoryPreset = audio.currentPreset.load();
+    presetDisplay.onClick = [this] { openBrowser(); };
+    browserButton.onClick = [this] { openBrowser(); };
+    previous.onClick = [this]
     {
-        if (i % 10 == 0)
-            presets.addSectionHeading (organix::categoryName (
-                organix::factoryPresets[static_cast<size_t> (i)].category));
-        presets.addItem (organix::factoryPresets[static_cast<size_t> (i)].name, i + 1);
-    }
-    presets.onChange = [this] {
-        if (presets.getSelectedId() > 0)
-        {
-            audio.loadFactoryPreset (presets.getSelectedId() - 1);
-            updateMaterialState();
-        }
+        audio.loadFactoryPreset ((audio.currentPreset.load() + 99) % 100);
+        currentPresetName = audio.getProgramName (audio.currentPreset.load());
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        updateMaterialState();
     };
-    previous.onClick = [this] {
-        const auto idx = audio.currentPreset.load (std::memory_order_relaxed);
-        presets.setSelectedId (1 + (idx + 99) % 100, juce::sendNotificationSync);
+    next.onClick = [this]
+    {
+        audio.loadFactoryPreset ((audio.currentPreset.load() + 1) % 100);
+        currentPresetName = audio.getProgramName (audio.currentPreset.load());
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        updateMaterialState();
     };
-    next.onClick = [this] {
-        const auto idx = audio.currentPreset.load (std::memory_order_relaxed);
-        presets.setSelectedId (1 + (idx + 1) % 100, juce::sendNotificationSync);
-    };
-    addAndMakeVisible (presets);
-    addAndMakeVisible (previous);
-    addAndMakeVisible (next);
+    for (auto* b : { &presetDisplay, &browserButton, &previous, &next })
+        addAndMakeVisible (*b);
+    presetDisplay.setColour (juce::TextButton::buttonColourId, ui::inset);
+    presetDisplay.setColour (juce::TextButton::textColourOffId, ui::text);
+    browserButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff15373e));
+    browserButton.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
-    const juce::StringArray routes { "PARALLEL", "SERIAL A > B", "SERIAL B > A", "CROSS-FUSION" };
-    for (int i = 0; i < routes.size(); ++i) routing.addItem (routes[i], i + 1);
-    routingAttachment = std::make_unique<ComboAttachment> (audio.parameters, "routing", routing);
-    addAndMakeVisible (routing);
+    language.addItem ("FR · Français", 1);
+    language.addItem ("EN · English", 2);
+    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    language.onChange = [this] { changeLanguage (language.getSelectedId() != 2); };
+    addAndMakeVisible (language);
+    language.setColour (juce::ComboBox::backgroundColourId, ui::inset);
+    language.setColour (juce::ComboBox::textColourId, ui::text);
+    language.setColour (juce::ComboBox::outlineColourId, ui::border);
+    language.setTooltip ("Français / English");
+
+    addAndMakeVisible (routeSelector);
+    browser = std::make_unique<OrganixPresetBrowser> (audio, *uiSettings);
+    browser->onApplied = [this] (const juce::String& name)
+    {
+        currentPresetName = name;
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        bindProperties();
+        updateMaterialState();
+        if (browser != nullptr) browser->setVisible (false);
+    };
+    browser->onDismissed = [this]
+    {
+        if (browser != nullptr) browser->setVisible (false);
+    };
+    addAndMakeVisible (*browser);
+    browser->setVisible (false);
 
     engaged.onClick = [this] { setAudioToggle ("bypass", vParam (audio, "bypass") < 0.5f); };
     tabA.onClick = [this] { selectLayer (0); };
@@ -532,7 +617,8 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     macroToggle.onClick = [this]
     {
         macroPage = ! macroPage;
-        macroToggle.setButtonText (macroPage ? "MAIN" : "MACROS");
+        macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
+                                            : juce::String ("MACROS"));
         macroToggle.setColour (juce::TextButton::buttonColourId,
                                macroPage ? ui::inset.brighter (0.13f) : ui::surface);
         resized();
@@ -559,6 +645,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         setupDial (macros[static_cast<size_t> (i)], macroIds[i], macroNames[i],
                    i % 2 == 0 ? ui::accentFor (0) : ui::accentFor (3));
     bindProperties();
+    changeLanguage (french);
     refreshPreset();
     updateMaterialState();
     setResizable (true, true);
@@ -572,7 +659,8 @@ OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
     for (auto& dial : properties) dial.attachment.reset();
     for (auto& dial : macros) dial.attachment.reset();
     for (auto& dial : bottom) dial.attachment.reset();
-    routingAttachment.reset();
+    if (browser != nullptr) browser.reset();
+    if (uiSettings != nullptr) uiSettings->saveIfNeeded();
     setLookAndFeel (nullptr);
 }
 void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
@@ -762,6 +850,7 @@ void OrganixAudioProcessorEditor::resized()
 void OrganixAudioProcessorEditor::timerCallback()
 {
     refreshPreset();
+    routeSelector.refresh();
     const int a = activeMaterial (0), b = activeMaterial (1);
     const int signature = a + 6 * b + 36 * selectedLayer +
                           (vParam (audio, "enableB") > 0.5f ? 72 : 0) +
