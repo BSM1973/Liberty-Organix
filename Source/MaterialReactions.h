@@ -8,16 +8,6 @@
 
 namespace organix
 {
-// Changes to the actual material DSP, not a crossfade or postmix.
-// All fields are bounded and default-neutral for old Organix projects.
-struct ReactionDrive
-{
-    float slow = 0.0f;       // reduces modulation speed of Liquid/Plasma
-    float excite = 0.0f;     // signed excitation of Crystal/Metal oscillators
-    float disperse = 0.0f;   // scatters Vapor grains / diffuses Light taps
-    float colour = 0.0f;     // small bipolar spectral / speed deviation
-};
-
 struct ReactionControls
 {
     bool enabled = false;
