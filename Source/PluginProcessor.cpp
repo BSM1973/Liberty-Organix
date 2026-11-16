@@ -34,6 +34,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("input", "Input Gain dB", -24.0f, 24.0f, 0.0f);
     add ("output", "Output Gain dB", -24.0f, 12.0f, 0.0f);
     add ("drywet", "Dry Wet", 0.0f, 1.0f, 0.65f);
+    layout.add (std::make_unique<Bool> (pid ("morphEnable"), "Four Scene Morph Enabled", false));
+    add ("morphX", "Four Scene Morph X", 0.0f, 1.0f, 0.0f);
+    add ("morphY", "Four Scene Morph Y", 0.0f, 1.0f, 0.0f);
     // Matter DNA: analysis is opt-in to preserve all v0.5 sessions.
     layout.add (std::make_unique<Bool> (pid ("dnaEnable"), "Enable Matter DNA", false));
     add ("dnaDepth", "Matter DNA Depth", 0.0f, 1.0f, 0.50f);
@@ -89,6 +92,14 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     engineA.prepare (sampleRate, getTotalNumInputChannels());
     engineB.prepare (sampleRate, getTotalNumInputChannels());
     matterDNA.prepare (sampleRate);
+    morphRender.prepare (sampleRate, getTotalNumInputChannels());
+    receivedVersions.fill (0);
+    morphBlendSmooth.reset (sampleRate, 0.085);
+    morphXSmooth.reset (sampleRate, 0.080);
+    morphYSmooth.reset (sampleRate, 0.080);
+    morphBlendSmooth.setCurrentAndTargetValue (0.0f);
+    morphXSmooth.setCurrentAndTargetValue (raw (parameters, "morphX"));
+    morphYSmooth.setCurrentAndTargetValue (raw (parameters, "morphY"));
     wetSmooth.reset (sampleRate, 0.025);
     bypassSmooth.reset (sampleRate, 0.008);
     outputSmooth.reset (sampleRate, 0.025);
@@ -108,6 +119,7 @@ void OrganixAudioProcessor::releaseResources()
     engineA.reset();
     engineB.reset();
     matterDNA.reset();
+    morphRender.reset();
 }
 
 bool OrganixAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -209,6 +221,48 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     engineA.configure (aMaterial, a);
     if (activeB) engineB.configure (bMaterial, b);
 
+    // Consume coherent scene snapshots from lock-free atomic mailboxes. A
+    // mid-write snapshot is skipped this block rather than blocking audio.
+    for (int scene = 0; scene < 4; ++scene)
+    {
+        auto& slot = morphMailbox[static_cast<size_t> (scene)];
+        const uint32_t version = slot.version.load (std::memory_order_acquire);
+        if ((version & 1u) != 0u || version == receivedVersions[static_cast<size_t> (scene)])
+            continue;
+        std::array<float, organix::MorphScene::packedCount> packed {};
+        for (size_t index = 0; index < packed.size(); ++index)
+            packed[index] = slot.data[index].load (std::memory_order_relaxed);
+        if (version == slot.version.load (std::memory_order_acquire))
+        {
+            morphRender.setScene (scene, organix::MorphScene::unpack (packed));
+            receivedVersions[static_cast<size_t> (scene)] = version;
+        }
+    }
+    const float morphXTarget = raw (parameters, "morphX");
+    const float morphYTarget = raw (parameters, "morphY");
+    const bool morphEnabled = raw (parameters, "morphEnable") > 0.5f;
+    morphBlendSmooth.setTargetValue (morphEnabled ? 1.0f : 0.0f);
+    morphXSmooth.setTargetValue (morphXTarget);
+    morphYSmooth.setTargetValue (morphYTarget);
+    const bool renderMorph = morphEnabled || morphBlendSmooth.getCurrentValue() > 0.00001f;
+    if (renderMorph)
+    {
+        organix::MatterDNAControls morphDNA;
+        morphDNA.enabled = dnaIsEnabled;
+        if (dnaIsEnabled)
+        {
+            morphDNA.depth = raw (parameters, "dnaDepth");
+            morphDNA.sensitivity = raw (parameters, "dnaSensitivity");
+            morphDNA.crystalAttack = raw (parameters, "dnaCrystalAttack");
+            morphDNA.vaporAir = raw (parameters, "dnaVaporAir");
+            morphDNA.energyMotion = raw (parameters, "dnaEnergyMotion");
+            morphDNA.spectralTone = raw (parameters, "dnaSpectralTone");
+        }
+        morphRender.configure (morphXSmooth.getCurrentValue(),
+                               morphYSmooth.getCurrentValue(),
+                               dnaFeatures, morphDNA);
+    }
+
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
     wetSmooth.setTargetValue (raw (parameters, "drywet"));
     bypassSmooth.setTargetValue (raw (parameters, "bypass") > 0.5f ? 0.0f : 1.0f);
@@ -251,6 +305,9 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float active = bypassSmooth.getNextValue();
         const float gain = outputSmooth.getNextValue();
         const float width = widthSmooth.getNextValue();
+        const float morphFraction = morphBlendSmooth.getNextValue();
+        const float morphX = morphXSmooth.getNextValue();
+        const float morphY = morphYSmooth.getNextValue();
         float originals[2] = {0.0f, 0.0f};
         float inputs[2] = {0.0f, 0.0f};
         float processed[2] = {0.0f, 0.0f};
@@ -261,19 +318,23 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const float original = std::isfinite (sample) ? sample : 0.0f;
             const float x = original * inputGain;
             float y = x;
-            if (! activeB)
-                y = engineA.process (ch, x);
-            else if (routing == 1)
-                y = engineB.process (ch, engineA.process (ch, x));
-            else if (routing == 2)
-                y = engineA.process (ch, engineB.process (ch, x));
-            else
+            // Skip the old processor when it is entirely masked by morphing.
+            if (morphFraction < 0.99999f)
             {
-                const float xa = engineA.process (ch, x);
-                const float xb = engineB.process (ch, x);
-                y = (1.0f - balance) * xa + balance * xb;
-                if (routing == 3)
-                    y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
+                if (! activeB)
+                    y = engineA.process (ch, x);
+                else if (routing == 1)
+                    y = engineB.process (ch, engineA.process (ch, x));
+                else if (routing == 2)
+                    y = engineA.process (ch, engineB.process (ch, x));
+                else
+                {
+                    const float xa = engineA.process (ch, x);
+                    const float xb = engineB.process (ch, x);
+                    y = (1.0f - balance) * xa + balance * xb;
+                    if (routing == 3)
+                        y += fusion * 0.27f * std::tanh (3.0f * xa * xb);
+                }
             }
             originals[ch] = original;
             inputs[ch] = x;
@@ -286,9 +347,27 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (channels == 2)
             organix::StereoWidth::process (processed[0], processed[1], width);
 
+        float morphProcessed[2] {};
+        float morphWet = wet;
+        if (renderMorph && morphFraction > 0.00001f)
+        {
+            const auto weights = organix::Morph4D::weights (morphX, morphY);
+            morphRender.processFrame (inputs, morphProcessed, channels, morphX, morphY);
+            if (channels == 2)
+                organix::StereoWidth::process (
+                    morphProcessed[0], morphProcessed[1], morphRender.widthAt (weights));
+            // Crossfade both DSP and saved per-scene wet values, with global
+            // movement retained as a modulation source across both modes.
+            morphWet = organix::Movement::scaleWet (
+                morphRender.wetAt (weights), movementAmount, modulation);
+        }
+
         for (int ch = 0; ch < channels; ++ch)
         {
-            const float mixed = (inputs[ch] * (1.0f - wet) + processed[ch] * wet) * gain;
+            const float base = inputs[ch] * (1.0f - wet) + processed[ch] * wet;
+            const float morph = inputs[ch] * (1.0f - morphWet) + morphProcessed[ch] * morphWet;
+            const float mixed = (base * (1.0f - morphFraction) +
+                                 morph * morphFraction) * gain;
             const float out = std::abs (mixed) < 0.96f
                 ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
             const float effect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
@@ -348,6 +427,9 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("motionRate", 0.25f);
     setParameter ("motionTrajectory", 0.0f);
     setParameter ("motionDivision", 2.0f);
+    setParameter ("morphEnable", 0.0f);
+    setParameter ("morphX", 0.0f);
+    setParameter ("morphY", 0.0f);
     // Safe neutral recall: v0.5 factory presets remain unchanged by Matter DNA.
     setParameter ("dnaEnable", 0.0f);
     setParameter ("dnaDepth", 0.5f);
@@ -378,6 +460,117 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     // A factory preset clears any displayed user-preset identity in host state.
     parameters.state.removeProperty ("customPresetName", nullptr);
     currentPreset.store (index);
+    // New factory patch starts with all four scenes matching its sound.
+    for (int i = 0; i < 4; ++i) captureMorphScene (i);
+}
+
+organix::MorphScene OrganixAudioProcessor::captureCurrentMorphScene() const noexcept
+{
+    auto read = [this] (const char* name) noexcept
+    {
+        if (const auto* p = parameters.getRawParameterValue (name))
+            return p->load (std::memory_order_relaxed);
+        return 0.0f;
+    };
+    organix::MorphScene scene;
+    scene.materialA = juce::jlimit (0, 5, static_cast<int> (read ("materialA")));
+    scene.materialB = juce::jlimit (0, 5, static_cast<int> (read ("materialB")));
+    scene.routing = juce::jlimit (0, 3, static_cast<int> (read ("routing")));
+    scene.enableB = read ("enableB") > 0.5f;
+    const float transform = read ("macroTransform") - 0.5f;
+    const float motion = read ("macroMotion") - 0.5f;
+    const float energy = read ("macroEnergy");
+    const float density = read ("macroDensity");
+    const float space = read ("macroSpace") - 0.5f;
+    const float harmonics = read ("macroHarmonics") - 0.5f;
+    const float evolution = read ("macroEvolution") - 0.5f;
+    scene.a.amount = clamp01 (read ("aAmount") + transform * 0.5f);
+    scene.a.motion = clamp01 (read ("aMotion") + motion * 0.5f + evolution * 0.3f);
+    scene.a.tone = clamp01 (read ("aTone") + harmonics * 0.6f);
+    scene.a.feedback = juce::jlimit (0.0f, 0.88f, read ("aFeedback") + space * 0.25f);
+    scene.a.energy = energy;
+    scene.a.density = density;
+    scene.b.amount = clamp01 (read ("bAmount") + transform * 0.5f);
+    scene.b.motion = clamp01 (read ("bMotion") + motion * 0.5f - evolution * 0.3f);
+    scene.b.tone = clamp01 (read ("bTone") + harmonics * 0.6f);
+    scene.b.feedback = juce::jlimit (0.0f, 0.88f, read ("bFeedback") + space * 0.25f);
+    scene.b.energy = energy;
+    scene.b.density = density;
+    for (int i = 0; i < 12; ++i)
+    {
+        const auto suffix = juce::String (i + 1).paddedLeft ('0', 2);
+        scene.a.shape[static_cast<size_t> (i)] = read ((juce::String ("aShape") + suffix).toRawUTF8());
+        scene.b.shape[static_cast<size_t> (i)] = read ((juce::String ("bShape") + suffix).toRawUTF8());
+    }
+    scene.fusion = clamp01 (read ("fusion") + (read ("macroFusion") - 0.5f) * 0.6f);
+    scene.balance = read ("balance");
+    scene.wet = read ("drywet");
+    scene.width = read ("width");
+    scene.sanitize();
+    return scene;
+}
+juce::String OrganixAudioProcessor::encodeMorphScene (const organix::MorphScene& scene)
+{
+    const auto values = scene.pack();
+    juce::StringArray tokens;
+    for (const auto value : values)
+        tokens.add (juce::String (value, 9));
+    return tokens.joinIntoString (",");
+}
+bool OrganixAudioProcessor::decodeMorphScene (const juce::String& serial,
+                                                organix::MorphScene& destination)
+{
+    const auto tokens = juce::StringArray::fromTokens (serial, ",", "");
+    if (tokens.size() != organix::MorphScene::packedCount) return false;
+    std::array<float, organix::MorphScene::packedCount> data {};
+    for (int i = 0; i < tokens.size(); ++i)
+    {
+        const auto text = tokens[i].trim();
+        if (text.isEmpty() || ! text.containsOnly ("-+.0123456789eE")) return false;
+        const double value = text.getDoubleValue();
+        if (! std::isfinite (value)) return false;
+        data[static_cast<size_t> (i)] = static_cast<float> (value);
+    }
+    destination = organix::MorphScene::unpack (data);
+    return true;
+}
+void OrganixAudioProcessor::publishMorphScene (int index,
+                                                organix::MorphScene scene, bool persist)
+{
+    if (index < 0 || index >= 4) return;
+    scene.sanitize();
+    auto& slot = morphMailbox[static_cast<size_t> (index)];
+    const auto data = scene.pack();
+    slot.version.fetch_add (1, std::memory_order_acq_rel); // mark write in progress
+    for (size_t i = 0; i < data.size(); ++i)
+        slot.data[i].store (data[i], std::memory_order_relaxed);
+    slot.version.fetch_add (1, std::memory_order_release);
+    if (persist)
+        parameters.state.setProperty ("morphScene" + juce::String (index),
+                                      encodeMorphScene (scene), nullptr);
+}
+void OrganixAudioProcessor::captureMorphScene (int index)
+{
+    publishMorphScene (index, captureCurrentMorphScene(), true);
+}
+organix::MorphScene OrganixAudioProcessor::readMorphScene (int index) const noexcept
+{
+    if (index < 0 || index >= 4) return {};
+    const auto& slot = morphMailbox[static_cast<size_t> (index)];
+    const auto versionBefore = slot.version.load (std::memory_order_acquire);
+    if (versionBefore & 1u) return {};
+    std::array<float, organix::MorphScene::packedCount> values {};
+    for (size_t i = 0; i < values.size(); ++i)
+        values[i] = slot.data[i].load (std::memory_order_relaxed);
+    const auto versionAfter = slot.version.load (std::memory_order_acquire);
+    return versionBefore == versionAfter ? organix::MorphScene::unpack (values)
+                                         : organix::MorphScene {};
+}
+void OrganixAudioProcessor::goToMorphScene (int index)
+{
+    if (index < 0 || index >= 4) return;
+    setParameter ("morphX", index % 2 == 1 ? 1.0f : 0.0f);
+    setParameter ("morphY", index >= 2 ? 1.0f : 0.0f);
 }
 
 void OrganixAudioProcessor::setCurrentProgram (int index) { loadFactoryPreset (index); }
@@ -402,6 +595,16 @@ void OrganixAudioProcessor::setStateInformation (const void* data, int size)
             auto state = juce::ValueTree::fromXml (*xml);
             currentPreset.store (juce::jlimit (0, 99, static_cast<int> (state.getProperty ("factoryPresetIndex", 0))));
             parameters.replaceState (state);
+            for (int index = 0; index < 4; ++index)
+            {
+                organix::MorphScene snapshot;
+                if (decodeMorphScene (
+                        state.getProperty ("morphScene" + juce::String (index)).toString(),
+                        snapshot))
+                    publishMorphScene (index, snapshot, false);
+                else
+                    captureMorphScene (index); // old v0.6 projects
+            }
         }
     }
 }
