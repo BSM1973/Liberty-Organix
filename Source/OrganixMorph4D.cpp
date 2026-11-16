@@ -183,14 +183,26 @@ void MorphRender::setScene (int scene, MorphScene next) noexcept
 }
 
 void MorphRender::configureOne (Pair& pair, const MorphScene& scene,
-                                const MorphScene& continuous) noexcept
+                                const MorphScene& continuous,
+                                MatterDNA::Features features,
+                                MatterDNAControls controls) noexcept
 {
-    pair.a.configure (static_cast<Material> (scene.materialA), continuous.a);
+    auto a = continuous.a;
+    auto b = continuous.b;
+    if (controls.enabled)
+    {
+        applyMatterDNA (static_cast<Material> (scene.materialA), a, features, controls);
+        if (scene.enableB)
+            applyMatterDNA (static_cast<Material> (scene.materialB), b, features, controls);
+    }
+    pair.a.configure (static_cast<Material> (scene.materialA), a);
     if (scene.enableB)
-        pair.b.configure (static_cast<Material> (scene.materialB), continuous.b);
+        pair.b.configure (static_cast<Material> (scene.materialB), b);
 }
 
-void MorphRender::configure (float x, float y) noexcept
+void MorphRender::configure (float x, float y,
+                             MatterDNA::Features features,
+                             MatterDNAControls controls) noexcept
 {
     blockWeights = Morph4D::weights (x, y);
     continuousBlend = Morph4D::interpolate (target, blockWeights);
@@ -200,7 +212,7 @@ void MorphRender::configure (float x, float y) noexcept
         const int bank = currentBank[index];
         if (! transitioning[index])
             configureOne (engines[index][static_cast<size_t> (bank)],
-                          target[index], continuousBlend);
+                          target[index], continuousBlend, features, controls);
         else
         {
             auto oldSceneSet = target;
@@ -208,7 +220,7 @@ void MorphRender::configure (float x, float y) noexcept
             const auto oldBlend = Morph4D::interpolate (oldSceneSet, blockWeights);
             previousContinuous[index] = oldBlend;
             configureOne (engines[index][static_cast<size_t> (bank)],
-                          previous[index], oldBlend);
+                          previous[index], oldBlend, features, controls);
             configureOne (engines[index][static_cast<size_t> (1 - bank)],
                           target[index], continuousBlend);
         }
