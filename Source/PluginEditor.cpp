@@ -294,39 +294,70 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
                                                 const juce::String& label, juce::Colour accent,
                                                 bool percent)
 {
+    dial.percent = percent;
     dial.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     dial.slider.setRotaryParameters (pi * 1.25f, pi * 2.75f, true);
-    dial.slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 66, 16);
+    dial.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     dial.slider.setDoubleClickReturnValue (true, percent ? 0.5 : 0.0);
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
-    dial.slider.setColour (juce::Slider::textBoxTextColourId, accent);
-    dial.slider.setColour (juce::Slider::textBoxBackgroundColourId, ui::panel);
-    dial.slider.setColour (juce::Slider::textBoxOutlineColourId, ui::panel);
-    if (percent)
-    {
-        dial.slider.textFromValueFunction = [] (double value) {
-            return juce::String (juce::roundToInt (value * 100.0)) + "%";
-        };
-        dial.slider.valueFromTextFunction = [] (const juce::String& input) {
-            return juce::jlimit (0.0, 1.0, input.getDoubleValue() / 100.0);
-        };
-    }
+    dial.slider.setMouseDragSensitivity (180);
+
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
     dial.label.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::plain)));
     dial.label.setJustificationType (juce::Justification::centred);
+    dial.label.setInterceptsMouseClicks (false, false);
+
+    dial.value.setJustificationType (juce::Justification::centred);
+    dial.value.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+    dial.value.setColour (juce::Label::textColourId, accent);
+    dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
+    dial.value.setEditable (true, true, false);
+    dial.value.onTextChange = [&dial]
+    {
+        double value = dial.value.getText().getDoubleValue();
+        if (dial.percent) value /= 100.0;
+        dial.slider.setValue (juce::jlimit (dial.slider.getMinimum(),
+                                          dial.slider.getMaximum(), value),
+                              juce::sendNotificationSync);
+    };
+    dial.slider.onValueChange = [&dial]
+    {
+        const auto value = dial.slider.getValue();
+        const auto text = dial.percent
+            ? juce::String (juce::roundToInt (value * 100.0)) + "%"
+            : juce::String (value, 1) + " dB";
+        dial.value.setText (text, juce::dontSendNotification);
+    };
+
     addAndMakeVisible (dial.slider);
     addAndMakeVisible (dial.label);
+    addAndMakeVisible (dial.value);
     if (id.isNotEmpty())
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, id, dial.slider);
+    dial.slider.onValueChange();
 }
 void OrganixAudioProcessorEditor::layoutDial (Dial& dial, juce::Rectangle<int> region)
 {
-    if (region.isEmpty()) { dial.slider.setBounds (0, 0, 0, 0); dial.label.setBounds (0, 0, 0, 0); return; }
-    auto content = region.reduced (3, 3);
+    if (region.isEmpty())
+    {
+        dial.slider.setBounds (0, 0, 0, 0);
+        dial.label.setBounds (0, 0, 0, 0);
+        dial.value.setBounds (0, 0, 0, 0);
+        return;
+    }
+
+    // Fidelity layout: rotary ring, then name, then numeric value.
+    // Values always share the same baseline in a grid row.
+    auto content = region.reduced (3, 2);
+    dial.value.setBounds (content.removeFromBottom (18));
     dial.label.setBounds (content.removeFromBottom (18));
-    dial.slider.setBounds (content);
+    const int diameter = juce::jmax (20, juce::jmin ({ 66, content.getWidth() - 8,
+                                                      content.getHeight() - 2 }));
+    dial.slider.setBounds (content.getCentreX() - diameter / 2,
+                           content.getCentreY() - diameter / 2,
+                           diameter, diameter);
 }
 int OrganixAudioProcessorEditor::activeMaterial (int layerIndex) const
 {
