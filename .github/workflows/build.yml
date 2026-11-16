@@ -47,7 +47,7 @@ jobs:
           import pathlib
           import re
           source = pathlib.Path("CMakeLists.txt").read_text(encoding="utf-8")
-          match = re.search(r"project\\(Organix VERSION ([0-9]+\\.[0-9]+\\.[0-9]+)", source)
+          match = re.search(r"project\(Organix VERSION ([0-9]+\.[0-9]+\.[0-9]+)", source)
           if not match:
               raise SystemExit("Missing Organix VERSION in CMakeLists.txt")
           print("number=" + match.group(1))
