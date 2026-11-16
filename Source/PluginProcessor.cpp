@@ -42,6 +42,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("bMotion", "Material B Motion", 0.0f, 1.0f, 0.45f);
     add ("bTone", "Material B Tone", 0.0f, 1.0f, 0.50f);
     add ("bFeedback", "Material B Feedback", 0.0f, 0.90f, 0.2f);
+    // 12 editable, persistent material controls per layer, independent of the selected engine.
+    // The engine maps these normalized values to its material-specific characteristics.
+    for (int i = 1; i <= 12; ++i)
+    {
+        const auto suffix = juce::String (i).paddedLeft ('0', 2);
+        for (const auto* layer : { "aShape", "bShape" })
+        {
+            const auto id = juce::String (layer) + suffix;
+            const auto prefix = juce::String (layer)[0] == 'a' ? "Material A Property " : "Material B Property ";
+            layout.add (std::make_unique<Float> (juce::ParameterID (id, 1),
+                                                  juce::String (prefix) + suffix,
+                                                  juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
+                                                  0.5f));
+        }
+    }
     add ("fusion", "Cross Fusion", 0.0f, 1.0f, 0.3f);
     add ("balance", "Material Balance", 0.0f, 1.0f, 0.5f);
     constexpr const char* ids[] = {"macroTransform", "macroMotion", "macroEnergy", "macroDensity", "macroSpace", "macroHarmonics", "macroEvolution", "macroFusion"};
@@ -113,6 +128,21 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     b.feedback = juce::jlimit (0.0f, 0.88f, raw (parameters, "bFeedback") + space * 0.25f);
     b.energy = energy;
     b.density = density;
+    constexpr const char* shapeIdsA[] = {
+        "aShape01", "aShape02", "aShape03", "aShape04",
+        "aShape05", "aShape06", "aShape07", "aShape08",
+        "aShape09", "aShape10", "aShape11", "aShape12"
+    };
+    constexpr const char* shapeIdsB[] = {
+        "bShape01", "bShape02", "bShape03", "bShape04",
+        "bShape05", "bShape06", "bShape07", "bShape08",
+        "bShape09", "bShape10", "bShape11", "bShape12"
+    };
+    for (size_t i = 0; i < a.shape.size(); ++i)
+    {
+        a.shape[i] = raw (parameters, shapeIdsA[i]);
+        b.shape[i] = raw (parameters, shapeIdsB[i]);
+    }
     engineA.configure (aMaterial, a);
     if (activeB) engineB.configure (bMaterial, b);
 
@@ -215,6 +245,14 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("macroHarmonics", 0.5f);
     setParameter ("macroEvolution", 0.5f);
     setParameter ("macroFusion", 0.5f);
+    // Factory presets v0.1 predate the twelve-property system. Reset new controls to
+    // neutral on recall so existing presets sound stable; individual sound design is pending.
+    for (int i = 1; i <= 12; ++i)
+    {
+        const auto suffix = juce::String (i).paddedLeft ('0', 2);
+        setParameter ((juce::String ("aShape") + suffix).toRawUTF8(), 0.5f);
+        setParameter ((juce::String ("bShape") + suffix).toRawUTF8(), 0.5f);
+    }
     currentPreset.store (index);
 }
 
