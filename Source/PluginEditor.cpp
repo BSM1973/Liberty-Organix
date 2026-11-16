@@ -83,6 +83,10 @@ void MatterView::setXY (juce::Point<float> point)
 }
 void MatterView::mouseDown (const juce::MouseEvent& e)
 {
+    // Header, subtitles and the RMS meter area must not trigger XY automation.
+    const auto field = getLocalBounds().toFloat().reduced (20.0f, 20.0f)
+                            .withTrimmedTop (104.0f).withTrimmedBottom (80.0f);
+    if (! field.contains (e.position)) return;
     const char* xId = layer == 0 ? "aShape03" : "bShape03";
     const char* yId = layer == 0 ? "aShape08" : "bShape08";
     gestureX = audio.parameters.getParameter (xId);
@@ -329,6 +333,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
+    dial.slider.setTooltip (label + " — drag to adjust, double-click to reset");
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
@@ -341,6 +346,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.value.setColour (juce::Label::textColourId, accent);
     dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
     dial.value.setEditable (true, true, false);
+    dial.value.setTooltip ("Click to type an exact value");
     dial.value.onTextChange = [&dial]
     {
         double value = dial.value.getText().getDoubleValue();
@@ -404,6 +410,9 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
+        dial.slider.setTooltip (dial.label.getText() + " — " + (selectedLayer == 0 ? "Layer A" : "Layer B") +
+                                " (automatable, double-click to reset)");
+        dial.slider.onValueChange();
     }
 }
 void OrganixAudioProcessorEditor::updateMaterialState()
