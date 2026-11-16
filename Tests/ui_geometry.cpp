@@ -71,10 +71,10 @@ static bool accepts (int width, int height)
         3 * outputKnobWidth > g.output.w - 24) return false;
 
     // Brand and preset toolbar (including plain FR/EN buttons) must not collide.
-    // Extra 82px DNA tab, preserving the brand without forcing the preset
-    // toolbar into the Liberty wordmark on compact 1240px editor widths.
-    const int actionSpan = 86 + 82 + 120 + 127 + 8;
-    const int toolbarWidth = std::min (485, std::max (340, g.header.w - actionSpan - 366));
+    // The new MORPH button is an additional 86px. All three editor pages,
+    // FR/EN, browser, preset toolbar and Liberty wordmark must remain separate.
+    const int actionSpan = 86 + 82 + 86 + 120 + 127 + 8;
+    const int toolbarWidth = std::min (485, std::max (310, g.header.w - actionSpan - 370));
     const int toolbarLeft = g.header.right() - actionSpan - toolbarWidth;
     const int brandRight = g.header.x + 59 + 290;
     if (toolbarWidth < 360 || toolbarLeft - brandRight < 16) return false;
@@ -87,6 +87,14 @@ static bool accepts (int width, int height)
     const int meterBarWidth = g.footer.w - meterBarStart - 43;
     if (lastDialRight >= meterX - 9 || meterBarWidth < 40 ||
         g.footer.h < 158 || meterX < 500) return false;
+    // Morph pad and four scene cards must fit their own dedicated views.
+    const int fieldWidth = g.center.w - 160;
+    const int fieldHeight = g.center.h - 235;
+    const int morphCardWidth = (g.footer.w - 24) / 4;
+    const int morphButtonWidth = (morphCardWidth - 24) / 2 - 2;
+    if (fieldWidth < 400 || fieldHeight < 180 ||
+        morphCardWidth < 240 || morphButtonWidth < 100 ||
+        g.footer.h - 45 < 110) return false;
     return true;
 }
 int main()
