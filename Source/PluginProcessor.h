@@ -5,6 +5,9 @@
 #include "FactoryPresets.h"
 #include "OrganixMovement.h"
 #include "MatterDNAModulation.h"
+#include "OrganixMorph4D.h"
+#include <array>
+#include <cstdint>
 #include <atomic>
 
 class OrganixAudioProcessor final : public juce::AudioProcessor
@@ -32,6 +35,10 @@ public:
     void setStateInformation (const void*, int) override;
 
     void loadFactoryPreset (int index);
+    // Message-thread capture/recall. Audio reads only atomic published values.
+    void captureMorphScene (int index);
+    void goToMorphScene (int index);
+    organix::MorphScene readMorphScene (int index) const noexcept;
     juce::AudioProcessorValueTreeState parameters;
     std::atomic<float> inputRms {0.0f};
     std::atomic<float> outputRms {0.0f};
@@ -48,6 +55,21 @@ private:
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
     organix::MatterDNA matterDNA;
+    organix::MorphRender morphRender;
+    juce::LinearSmoothedValue<float> morphBlendSmooth, morphXSmooth, morphYSmooth;
+    struct SceneMailbox
+    {
+        std::atomic<uint32_t> version {0};
+        std::array<std::atomic<float>, organix::MorphScene::packedCount> data {};
+    };
+    std::array<SceneMailbox,4> morphMailbox {};
+    std::array<uint32_t,4> receivedVersions {};
+    void publishMorphScene (int index, organix::MorphScene scene,
+                            bool persist);
+    organix::MorphScene captureCurrentMorphScene() const noexcept;
+    static juce::String encodeMorphScene (const organix::MorphScene& scene);
+    static bool decodeMorphScene (const juce::String& text,
+                                  organix::MorphScene& scene);
     juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
     float lastMeterLevel = 0.0f;
     float movementPhase = 0.0f;
