@@ -1,6 +1,8 @@
 #include "../Source/OrganixUILayout.h"
 #include <algorithm>
+#include <array>
 #include <iostream>
+#include <utility>
 
 static bool accepts (int width, int height)
 {
@@ -43,9 +45,11 @@ int main()
             ++checked;
         }
     }
-    for (auto [width, height] : {
-        std::pair<int,int> {1240, 820}, {1504, 1008}, {1940, 1220},
-        {1240, 1220}, {1940, 820}, {1450, 875}})
+    const std::array<std::pair<int, int>, 6> critical {{
+        {1240, 820}, {1504, 1008}, {1940, 1220},
+        {1240, 1220}, {1940, 820}, {1450, 875}
+    }};
+    for (const auto& [width, height] : critical)
     {
         if (! accepts (width, height))
         {
