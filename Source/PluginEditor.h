@@ -6,6 +6,7 @@
 #include "OrganixRoutingSelector.h"
 #include "OrganixPresetBrowser.h"
 #include "OrganixMatterDNAView.h"
+#include "OrganixMorphView.h"
 #include <array>
 #include <memory>
 
@@ -82,9 +83,12 @@ private:
     organix::ui::LookAndFeel lookAndFeel;
     MatterView visualizer;
     OrganixMatterDNAView dnaView;
+    OrganixMorphPad morphPad;
+    OrganixMorphControls morphControls;
     int selectedLayer = 0;
     bool macroPage = false;
     bool dnaPage = false;
+    bool morphPage = false;
     bool french = true;
     int lastPreset = -1;
     int lastFactoryPreset = -1;
@@ -100,7 +104,8 @@ private:
     juce::TextButton presetDisplay { "PRESET" }, browserButton { "BROWSER" };
     juce::TextButton previous { "<" }, next { ">" };
     OrganixRoutingSelector routeSelector;
-    juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" }, dnaToggle { "ADN" };
+    juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" },
+                     dnaToggle { "ADN" }, morphToggle { "MORPH" };
     juce::TextButton tabA { "LAYER A" }, tabB { "LAYER B" };
     juce::TextButton enableB { "B ON" };
     std::array<organix::ui::MaterialButton, 6> materialButtons;
