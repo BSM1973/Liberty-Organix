@@ -77,7 +77,7 @@ static bool accepts (int width, int height)
     const int toolbarWidth = std::min (485, std::max (310, g.header.w - actionSpan - 370));
     const int toolbarLeft = g.header.right() - actionSpan - toolbarWidth;
     const int brandRight = g.header.x + 59 + 290;
-    if (toolbarWidth < 360 || toolbarLeft - brandRight < 16) return false;
+    if (toolbarWidth < 310 || toolbarLeft - brandRight < 16) return false;
 
     // Six DNA knobs + five live feature meters share a separate footer page.
     const int meterX = static_cast<int> (std::lround (g.footer.w * 0.605));
