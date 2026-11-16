@@ -1,0 +1,48 @@
+name: Organix AU/VST3 — macOS ARM64
+on:
+  push:
+    paths:
+      - 'Source/**'
+      - 'Tests/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/build.yml'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  macos-arm64:
+    name: macOS Apple Silicon — AU + VST3 + Tests
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm native Apple Silicon
+        shell: bash
+        run: |
+          echo "Architecture: $(uname -m)"
+          test "$(uname -m)" = "arm64"
+      - name: Configure JUCE 8 / CMake for ARM64
+        run: cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build Audio Unit, VST3, Standalone and DSP tests
+        run: cmake --build build --config Release --parallel 2
+      - name: Run DSP and factory preset tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify AU and VST3 are native ARM64 and package them
+        shell: bash
+        run: |
+          set -euo pipefail
+          AU="build/Organix_artefacts/Release/AU/Organix.component"
+          VST3="build/Organix_artefacts/Release/VST3/Organix.vst3"
+          test -f "$AU/Contents/MacOS/Organix"
+          test -f "$VST3/Contents/MacOS/Organix"
+          file "$AU/Contents/MacOS/Organix" "$VST3/Contents/MacOS/Organix"
+          lipo -archs "$AU/Contents/MacOS/Organix" | grep -qw arm64
+          lipo -archs "$VST3/Contents/MacOS/Organix" | grep -qw arm64
+          ditto -c -k --keepParent "$AU" Organix-AU-macOS-arm64.zip
+          ditto -c -k --keepParent "$VST3" Organix-VST3-macOS-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organix-v0.1-macOS-arm64-AU-VST3
+          path: |
+            Organix-AU-macOS-arm64.zip
+            Organix-VST3-macOS-arm64.zip
+          if-no-files-found: error
