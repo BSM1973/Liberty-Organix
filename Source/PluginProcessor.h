@@ -42,7 +42,7 @@ public:
 private:
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
-    juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth;
+    juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
     float lastMeterLevel = 0.0f;
     float movementPhase = 0.0f;
     float movementHeld = 0.0f;
