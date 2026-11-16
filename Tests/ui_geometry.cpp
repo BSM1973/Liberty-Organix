@@ -27,6 +27,28 @@ static bool accepts (int width, int height)
     if ((g.fusion.w - 24) / 3 < 100) return false;
     if ((g.movement.w - 24) / 2 < 100) return false;
     if ((g.output.w - 24) / 2 < 100) return false;
+
+    // New two-row routing selector must never cover the A/B label area or
+    // the three Fusion rotary controls, even at 1240x820.
+    using organix::layout::Rect;
+    const Rect routing { g.fusion.right() - 252, g.fusion.y + 8, 240, 63 };
+    const Rect heading { g.fusion.x + 17, g.fusion.y + 10, 137, 19 };
+    const Rect layerA { g.fusion.x + 18, g.fusion.y + 32, 139, 17 };
+    const Rect layerB { g.fusion.x + 18, g.fusion.y + 49, 139, 17 };
+    const Rect fusionDials { g.fusion.x + 12, g.fusion.y + 76,
+                             g.fusion.w - 24, g.fusion.h - 81 };
+    if (routing.x < g.fusion.x || routing.right() > g.fusion.right() ||
+        routing.y < g.fusion.y || routing.bottom() > g.fusion.bottom()) return false;
+    if (routing.intersects (heading) || routing.intersects (layerA) ||
+        routing.intersects (layerB) || routing.intersects (fusionDials)) return false;
+    if (fusionDials.h < 70) return false;
+
+    // Brand and preset toolbar (including French/English menu) must not collide.
+    const int actionSpan = 86 + 120 + 127 + 8;
+    const int toolbarWidth = std::min (485, g.header.w - actionSpan - 315);
+    const int toolbarLeft = g.header.right() - actionSpan - toolbarWidth;
+    const int brandRight = g.header.x + 59 + 290;
+    if (toolbarWidth < 360 || toolbarLeft - brandRight < 16) return false;
     return true;
 }
 int main()

@@ -1,5 +1,5 @@
 #pragma once
-#include "OrganixUITheme.h"
+#include "OrganixI18n.h"
 #include <cmath>
 
 namespace organix::ui
@@ -84,6 +84,7 @@ class MaterialButton final : public juce::TextButton
 public:
     explicit MaterialButton (int materialNumber = 0) : material (materialNumber) {}
     void setMaterial (int value) { material = juce::jlimit (0, 5, value); repaint(); }
+    void setFrench (bool value) { french = value; repaint(); }
     void setLayerState (bool isSelected, bool isA, bool isB)
     {
         if (selected != isSelected || a != isA || b != isB)
@@ -111,12 +112,13 @@ public:
         drawMaterialGlyph (g, material, { 11.0f, r.getCentreY() - 13.0f, 26.0f, 26.0f }, accentColour);
         g.setColour (selected ? accentColour : secondary);
         g.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::bold)));
-        g.drawFittedText (name[static_cast<size_t> (material)],
+        g.drawFittedText (materialLabel (material, french),
                           { 46, static_cast<int> (r.getCentreY() - 15.0f), juce::jmax (62, getWidth() - 71), 18 },
                           juce::Justification::centredLeft, 1, 0.84f);
         g.setColour (subdued);
         g.setFont (juce::Font (juce::FontOptions (9.0f)));
-        g.drawFittedText (juce::String (material + 1).paddedLeft ('0', 2) + "  /  MATERIAL",
+        g.drawFittedText (juce::String (material + 1).paddedLeft ('0', 2) +
+                          word (french, "  /  MATÉRIAU", "  /  MATERIAL"),
                           { 46, static_cast<int> (r.getCentreY() + 4.0f), juce::jmax (60, getWidth() - 60), 16 },
                           juce::Justification::centredLeft, 1, 0.76f);
         if (a || b)
@@ -130,6 +132,6 @@ public:
     }
 private:
     int material = 0;
-    bool selected = false, a = false, b = false;
+    bool selected = false, a = false, b = false, french = true;
 };
 }

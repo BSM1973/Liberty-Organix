@@ -116,23 +116,26 @@ void MatterView::paint (juce::Graphics& g)
     const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
     const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
     const auto whole = getLocalBounds();
-    title (g, "INTERACTIVE SOUND FIELD", whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
+    title (g, ui::word (french, "CHAMP SONORE INTERACTIF", "INTERACTIVE SOUND FIELD"), whole.withTrimmedLeft (22).withTrimmedTop (14).withHeight (18),
            10.0f, ui::subdued, true);
-    title (g, ui::name[static_cast<size_t> (id)], whole.withTrimmedLeft (22).withTrimmedTop (34).withHeight (34),
+    title (g, ui::materialLabel (id, french), whole.withTrimmedLeft (22).withTrimmedTop (34).withHeight (34),
            26.0f, accent, false);
     title (g, layer == 0 ? "/ A" : "/ B", whole.withTrimmedLeft (191).withTrimmedTop (42).withHeight (21),
            11.0f, ui::subdued, true);
     const bool secondActive = vParam (audio, "enableB") > 0.5f;
-    title (g, secondActive ? "FUSED WITH" : "SECOND LAYER", whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
+    title (g, secondActive ? ui::word (french, "FUSION AVEC", "FUSED WITH") :
+                                    ui::word (french, "SECONDE COUCHE", "SECOND LAYER"), whole.withTrimmedRight (23).withTrimmedTop (26).withHeight (17),
            9.0f, ui::subdued, true, juce::Justification::centredRight);
-    title (g, secondActive ? ui::name[static_cast<size_t> (other)] : "DISENGAGED",
+    title (g, secondActive ? ui::materialLabel (other, french) :
+                          ui::word (french, "DÉSACTIVÉE", "DISENGAGED"),
            whole.withTrimmedRight (23).withTrimmedTop (45).withHeight (20),
            11.0f, secondActive ? ui::accentFor (other) : ui::subdued,
            true, juce::Justification::centredRight);
     g.setColour (ui::border); g.drawLine (20.0f, 84.0f, rect.getRight() - 20.0f, 84.0f, 1.0f);
-    title (g, "MATERIAL SURFACE", whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
+    title (g, ui::word (french, "SURFACE DU MATÉRIAU", "MATERIAL SURFACE"), whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::subdued);
-    title (g, "LIVE DSP / AUDIO-REACTIVE", whole.withTrimmedRight (24).withTrimmedTop (89).withHeight (24),
+    title (g, ui::word (french, "DSP TEMPS RÉEL / RÉACTIF AU SON",
+                                   "LIVE DSP / AUDIO-REACTIVE"), whole.withTrimmedRight (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::secondary, false, juce::Justification::centredRight);
 
     const float top = 125.0f, bottom = rect.getHeight() - 89.0f;
@@ -286,9 +289,9 @@ void MatterView::paint (juce::Graphics& g)
     g.drawEllipse (cx - 10.0f, cy - 10.0f, 20.0f, 20.0f, 1.0f);
     g.drawLine (cx - 5.0f, cy, cx + 5.0f, cy, 1.0f);
     g.drawLine (cx, cy - 5.0f, cx, cy + 5.0f, 1.0f);
-    title (g, "DRAG TO SHAPE SOUND  /  X: " +
-               juce::String (ui::controls[static_cast<size_t> (id)][2]) +
-               "  /  Y: " + ui::controls[static_cast<size_t> (id)][7],
+    title (g, ui::word (french, "GLISSER POUR FAÇONNER LE SON / X : ",
+                                   "DRAG TO SHAPE SOUND / X: ") +
+               ui::property (id, 2, french) + "  /  Y : " + ui::property (id, 7, french),
            whole.withTrimmedBottom (82).withTrimmedTop (whole.getHeight() - 119),
            9.0f, ui::subdued, false, juce::Justification::centred);
 
@@ -300,7 +303,9 @@ void MatterView::paint (juce::Graphics& g)
     const auto outPeak = toDb (audio.outputPeak.load (std::memory_order_relaxed));
     const int colW = juce::jmax (80, (getWidth() - 40) / 3);
     const juce::String metric[] = {
-        "INPUT RMS", "OUTPUT RMS", "PEAK OUT"
+        ui::word (french, "ENTRÉE RMS", "INPUT RMS"),
+        ui::word (french, "SORTIE RMS", "OUTPUT RMS"),
+        ui::word (french, "CRÊTE SORTIE", "PEAK OUT")
     };
     const float vals[] = { input, output, outPeak };
     for (int i = 0; i < 3; ++i)
@@ -406,12 +411,15 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.attachment.reset();
         const auto suffix = juce::String (i + 1).paddedLeft ('0', 2);
         const auto parameterId = juce::String (selectedLayer == 0 ? "aShape" : "bShape") + suffix;
-        dial.label.setText (ui::controls[static_cast<size_t> (id)][static_cast<size_t> (i)], juce::dontSendNotification);
+        dial.label.setText (ui::property (id, i, french), juce::dontSendNotification);
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
-        dial.slider.setTooltip (dial.label.getText() + " — " + (selectedLayer == 0 ? "Layer A" : "Layer B") +
-                                " (automatable, double-click to reset)");
+        dial.slider.setTooltip (dial.label.getText() + " — " +
+                ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
+                                  selectedLayer == 0 ? "Layer A" : "Layer B") +
+                ui::word (french, " · automatisable, double-clic : réinitialiser",
+                                  " · automatable, double-click: reset"));
         dial.slider.onValueChange();
     }
 }
@@ -427,10 +435,12 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     tabB.setColour (juce::TextButton::buttonColourId, selectedLayer == 1 ? ui::inset : ui::surface);
     tabA.setColour (juce::TextButton::textColourOffId, selectedLayer == 0 ? ui::accentFor (a) : ui::secondary);
     tabB.setColour (juce::TextButton::textColourOffId, selectedLayer == 1 ? ui::accentFor (b) : ui::secondary);
-    enableB.setButtonText (enabled ? "B ON" : "B OFF");
+    enableB.setButtonText (enabled ? ui::word (french, "B ACTIF", "B ON")
+                                  : ui::word (french, "B INACTIF", "B OFF"));
     enableB.setColour (juce::TextButton::textColourOffId, enabled ? ui::engaged : ui::secondary);
     const bool bypassed = vParam (audio, "bypass") > 0.5f;
-    engaged.setButtonText (bypassed ? "BYPASSED" : "ENGAGED");
+    engaged.setButtonText (bypassed ? ui::word (french, "DÉSACTIVÉ", "BYPASSED")
+                                  : ui::word (french, "ACTIVÉ", "ENGAGED"));
     engaged.setColour (juce::TextButton::buttonColourId, bypassed ? ui::surface : juce::Colour (0xff11352f));
     engaged.setColour (juce::TextButton::textColourOffId, bypassed ? ui::secondary : ui::engaged);
     for (auto& dial : properties)
@@ -440,7 +450,7 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     }
     for (int i = 0; i < 12; ++i)
         properties[static_cast<size_t> (i)].label.setText (
-            ui::controls[static_cast<size_t> (selected)][static_cast<size_t> (i)], juce::dontSendNotification);
+            ui::property (selected, i, french), juce::dontSendNotification);
     visualizer.setLayer (selectedLayer);
     repaint();
 }
@@ -476,13 +486,68 @@ void OrganixAudioProcessorEditor::setAudioToggle (const char* id, bool enabled)
 }
 void OrganixAudioProcessorEditor::refreshPreset()
 {
-    const int index = audio.currentPreset.load (std::memory_order_relaxed);
-    if (index >= 0 && index < 100 && presets.getSelectedId() != index + 1)
-        presets.setSelectedId (index + 1, juce::dontSendNotification);
+    const int idx = juce::jlimit (0, 99, audio.currentPreset.load (std::memory_order_relaxed));
+    const auto custom = audio.parameters.state.getProperty ("customPresetName").toString();
+    if (custom.isNotEmpty())
+        currentPresetName = custom;
+    else if (lastFactoryPreset != idx || currentPresetName.isEmpty())
+        currentPresetName = audio.getProgramName (idx);
+    lastFactoryPreset = idx;
+    presetDisplay.setButtonText (currentPresetName.isNotEmpty() ? currentPresetName : audio.getProgramName (idx));
+}
+void OrganixAudioProcessorEditor::openBrowser()
+{
+    if (browser == nullptr) return;
+    browser->setFrench (french);
+    browser->setBounds (getLocalBounds());
+    browser->setVisible (true);
+    browser->toFront (true);
+}
+void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
+{
+    french = useFrench;
+    if (uiSettings != nullptr)
+    {
+        uiSettings->setValue ("language", french ? "fr" : "en");
+        uiSettings->saveIfNeeded();
+    }
+    visualizer.setFrench (french);
+    routeSelector.setFrench (french);
+    if (browser != nullptr) browser->setFrench (french);
+    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
+    macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
+                                       : ui::word (french, "MACROS", "MACROS"));
+    tabA.setButtonText (ui::word (french, "COUCHE A", "LAYER A"));
+    tabB.setButtonText (ui::word (french, "COUCHE B", "LAYER B"));
+    constexpr const char* frBottom[] = {
+        "FUSION", "ÉQUILIBRE", "SEC / EFFET", "MOUVEMENT", "ÉVOLUTION", "ENTRÉE", "SORTIE"
+    };
+    constexpr const char* enBottom[] = {
+        "FUSION", "BALANCE", "DRY / WET", "MOTION", "EVOLUTION", "INPUT", "OUTPUT"
+    };
+    for (int i = 0; i < 7; ++i)
+        bottom[static_cast<size_t> (i)].label.setText (
+            juce::String::fromUTF8 (french ? frBottom[i] : enBottom[i]), juce::dontSendNotification);
+    constexpr const char* frMacros[] = {
+        "TRANSFORMER", "MOUVEMENT", "ÉNERGIE", "DENSITÉ",
+        "ESPACE", "HARMONIQUES", "ÉVOLUTION", "FUSION"
+    };
+    constexpr const char* enMacros[] = {
+        "TRANSFORM", "MOTION", "ENERGY", "DENSITY",
+        "SPACE", "HARMONICS", "EVOLUTION", "FUSION"
+    };
+    for (int i = 0; i < 8; ++i)
+        macros[static_cast<size_t> (i)].label.setText (
+            juce::String::fromUTF8 (french ? frMacros[i] : enMacros[i]), juce::dontSendNotification);
+    for (auto& card : materialButtons) card.setFrench (french);
+    bindProperties();
+    updateMaterialState();
+    repaint();
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p)
+    : AudioProcessorEditor (&p), audio (p), visualizer (p), routeSelector (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (visualizer);
@@ -494,36 +559,62 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         button.onClick = [this, i] { selectMaterial (i); };
         addAndMakeVisible (button);
     }
-    for (int i = 0; i < 100; ++i)
+    uiSettings = std::make_unique<juce::PropertiesFile> (ui::preferenceOptions());
+    french = uiSettings->getValue ("language", "fr") != "en";
+    currentPresetName = audio.getProgramName (audio.currentPreset.load());
+    lastFactoryPreset = audio.currentPreset.load();
+    presetDisplay.onClick = [this] { openBrowser(); };
+    browserButton.onClick = [this] { openBrowser(); };
+    previous.onClick = [this]
     {
-        if (i % 10 == 0)
-            presets.addSectionHeading (organix::categoryName (
-                organix::factoryPresets[static_cast<size_t> (i)].category));
-        presets.addItem (organix::factoryPresets[static_cast<size_t> (i)].name, i + 1);
-    }
-    presets.onChange = [this] {
-        if (presets.getSelectedId() > 0)
-        {
-            audio.loadFactoryPreset (presets.getSelectedId() - 1);
-            updateMaterialState();
-        }
+        audio.loadFactoryPreset ((audio.currentPreset.load() + 99) % 100);
+        currentPresetName = audio.getProgramName (audio.currentPreset.load());
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        updateMaterialState();
     };
-    previous.onClick = [this] {
-        const auto idx = audio.currentPreset.load (std::memory_order_relaxed);
-        presets.setSelectedId (1 + (idx + 99) % 100, juce::sendNotificationSync);
+    next.onClick = [this]
+    {
+        audio.loadFactoryPreset ((audio.currentPreset.load() + 1) % 100);
+        currentPresetName = audio.getProgramName (audio.currentPreset.load());
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        updateMaterialState();
     };
-    next.onClick = [this] {
-        const auto idx = audio.currentPreset.load (std::memory_order_relaxed);
-        presets.setSelectedId (1 + (idx + 1) % 100, juce::sendNotificationSync);
-    };
-    addAndMakeVisible (presets);
-    addAndMakeVisible (previous);
-    addAndMakeVisible (next);
+    for (auto* b : { &presetDisplay, &browserButton, &previous, &next })
+        addAndMakeVisible (*b);
+    presetDisplay.setColour (juce::TextButton::buttonColourId, ui::inset);
+    presetDisplay.setColour (juce::TextButton::textColourOffId, ui::text);
+    browserButton.setColour (juce::TextButton::buttonColourId, juce::Colour (0xff15373e));
+    browserButton.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
 
-    const juce::StringArray routes { "PARALLEL", "SERIAL A > B", "SERIAL B > A", "CROSS-FUSION" };
-    for (int i = 0; i < routes.size(); ++i) routing.addItem (routes[i], i + 1);
-    routingAttachment = std::make_unique<ComboAttachment> (audio.parameters, "routing", routing);
-    addAndMakeVisible (routing);
+    language.addItem ("FR · Français", 1);
+    language.addItem ("EN · English", 2);
+    language.setSelectedId (french ? 1 : 2, juce::dontSendNotification);
+    language.onChange = [this] { changeLanguage (language.getSelectedId() != 2); };
+    addAndMakeVisible (language);
+    language.setColour (juce::ComboBox::backgroundColourId, ui::inset);
+    language.setColour (juce::ComboBox::textColourId, ui::text);
+    language.setColour (juce::ComboBox::outlineColourId, ui::border);
+    language.setTooltip ("Français / English");
+
+    addAndMakeVisible (routeSelector);
+    browser = std::make_unique<OrganixPresetBrowser> (audio, *uiSettings);
+    browser->onApplied = [this] (const juce::String& name)
+    {
+        currentPresetName = name;
+        lastFactoryPreset = audio.currentPreset.load();
+        refreshPreset();
+        bindProperties();
+        updateMaterialState();
+        if (browser != nullptr) browser->setVisible (false);
+    };
+    browser->onDismissed = [this]
+    {
+        if (browser != nullptr) browser->setVisible (false);
+    };
+    addAndMakeVisible (*browser);
+    browser->setVisible (false);
 
     engaged.onClick = [this] { setAudioToggle ("bypass", vParam (audio, "bypass") < 0.5f); };
     tabA.onClick = [this] { selectLayer (0); };
@@ -532,7 +623,8 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     macroToggle.onClick = [this]
     {
         macroPage = ! macroPage;
-        macroToggle.setButtonText (macroPage ? "MAIN" : "MACROS");
+        macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
+                                            : juce::String ("MACROS"));
         macroToggle.setColour (juce::TextButton::buttonColourId,
                                macroPage ? ui::inset.brighter (0.13f) : ui::surface);
         resized();
@@ -559,6 +651,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         setupDial (macros[static_cast<size_t> (i)], macroIds[i], macroNames[i],
                    i % 2 == 0 ? ui::accentFor (0) : ui::accentFor (3));
     bindProperties();
+    changeLanguage (french);
     refreshPreset();
     updateMaterialState();
     setResizable (true, true);
@@ -572,7 +665,8 @@ OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
     for (auto& dial : properties) dial.attachment.reset();
     for (auto& dial : macros) dial.attachment.reset();
     for (auto& dial : bottom) dial.attachment.reset();
-    routingAttachment.reset();
+    if (browser != nullptr) browser.reset();
+    if (uiSettings != nullptr) uiSettings->saveIfNeeded();
     setLookAndFeel (nullptr);
 }
 void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
@@ -595,8 +689,10 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                     static_cast<float> (headerBounds.getY() + 45 + i * 7),
                     static_cast<float> (headerBounds.getX() + 43),
                     static_cast<float> (headerBounds.getY() + 45 + i * 7), 1.1f);
-    title (g, "TEXTURE LIBRARY  /  100 FACTORY STARTING POINTS",
-           { presets.getX(), presets.getBottom() + 3, presets.getWidth(), 17 },
+    title (g, ui::word (french, "BIBLIOTHÈQUE  /  100 PRESETS D’USINE + PRESETS PERSONNELS",
+                                "LIBRARY  /  100 FACTORY + USER PRESETS"),
+           { presetDisplay.getX(), presetDisplay.getBottom() + 3,
+             presetDisplay.getWidth() + browserButton.getWidth(), 17 },
            9.0f, ui::subdued, false);
     g.setColour (ui::line); g.drawLine (static_cast<float> (margin.getX()),
                                        static_cast<float> (headerBounds.getBottom() + 2),
@@ -611,29 +707,29 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
         ui::drawPanel (g, footerMotion);
         ui::drawPanel (g, footerOutput);
     }
-    title (g, "MATERIAL ENGINES", { leftBounds.getX() + 14, leftBounds.getY() + 15, leftBounds.getWidth() - 27, 21 },
+    title (g, ui::word (french, "MOTEURS DE MATÉRIAUX", "MATERIAL ENGINES"), { leftBounds.getX() + 14, leftBounds.getY() + 15, leftBounds.getWidth() - 27, 21 },
            10.0f, ui::secondary, true);
-    title (g, "EDITING LAYER " + juce::String (selectedLayer == 0 ? "A" : "B"),
+    title (g, ui::word (french, "ÉDITION COUCHE ", "EDITING LAYER ") + juce::String (selectedLayer == 0 ? "A" : "B"),
            { leftBounds.getX() + 14, leftBounds.getY() + 41, leftBounds.getWidth() - 28, 20 },
            10.0f, ui::subdued);
     const int current = activeMaterial (selectedLayer);
     // The active material stripe, icon and layer badges are drawn by MaterialButton.
     g.setColour (ui::engaged); g.fillEllipse (static_cast<float> (leftBounds.getX() + 16),
                               static_cast<float> (leftBounds.getBottom() - 37), 4.0f, 4.0f);
-    title (g, "SIX LIVE PROCESSORS",
+    title (g, ui::word (french, "SIX MOTEURS ACTIFS", "SIX LIVE PROCESSORS"),
            { leftBounds.getX() + 27, leftBounds.getBottom() - 43, leftBounds.getWidth() - 35, 20 },
            9.0f, ui::subdued, true);
 
-    title (g, "MATERIAL PROPERTIES", { rightBounds.getX() + 19, rightBounds.getY() + 61,
+    title (g, ui::word (french, "PROPRIÉTÉS DU MATÉRIAU", "MATERIAL PROPERTIES"), { rightBounds.getX() + 19, rightBounds.getY() + 61,
                                       rightBounds.getWidth() - 38, 18 },
            10.0f, ui::secondary, true);
-    title (g, ui::name[static_cast<size_t> (current)],
+    title (g, ui::materialLabel (current, french),
            { rightBounds.getX() + 19, rightBounds.getY() + 81, rightBounds.getWidth() - 38, 35 },
            26.0f, ui::accentFor (current));
-    title (g, ui::description[static_cast<size_t> (current)],
+    title (g, ui::materialDescription (current, french),
            { rightBounds.getX() + 19, rightBounds.getY() + 117, rightBounds.getWidth() - 38, 20 },
            11.0f, ui::secondary);
-    title (g, "SOURCE-DRIVEN  /  12 LIVE PARAMETERS",
+    title (g, ui::word (french, "12 PARAMÈTRES AUDIO AUTOMATISABLES", "12 AUTOMATABLE AUDIO PARAMETERS"),
            { rightBounds.getX() + 18, rightBounds.getBottom() - 27, rightBounds.getWidth() - 36, 19 },
            9.0f, ui::subdued, true, juce::Justification::centred);
     g.setColour (ui::line);
@@ -641,24 +737,30 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                 static_cast<float> (rightBounds.getRight() - 17), static_cast<float> (rightBounds.getBottom() - 33), 1.0f);
 
     if (macroPage)
-        title (g, "EIGHT PERFORMANCE MACROS", { footerAll.getX() + 17, footerAll.getY() + 11,
+        title (g, ui::word (french, "HUIT MACROS DE PERFORMANCE", "EIGHT PERFORMANCE MACROS"), { footerAll.getX() + 17, footerAll.getY() + 11,
                                                 footerAll.getWidth() - 34, 24 }, 11.0f, ui::secondary, true);
     else
     {
-        title (g, "DUAL FUSION", { footerFusion.getX() + 17, footerFusion.getY() + 13, 210, 20 },
+        title (g, ui::word (french, "FUSION A/B", "DUAL FUSION"),
+               { footerFusion.getX() + 17, footerFusion.getY() + 10, 137, 19 },
                11.0f, ui::secondary, true);
-        title (g, "MOVEMENT", { footerMotion.getX() + 17, footerMotion.getY() + 13, 200, 20 },
+        title (g, ui::word (french, "MOUVEMENT", "MOVEMENT"), { footerMotion.getX() + 17, footerMotion.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
-        title (g, "SIGNAL & OUTPUT", { footerOutput.getX() + 17, footerOutput.getY() + 13, 200, 20 },
+        title (g, ui::word (french, "SIGNAL & SORTIE", "SIGNAL & OUTPUT"), { footerOutput.getX() + 17, footerOutput.getY() + 13, 200, 20 },
                11.0f, ui::secondary, true);
         const auto da = activeMaterial (0), db = activeMaterial (1);
-        title (g, "A / " + juce::String (ui::name[static_cast<size_t> (da)]) +
-                  "     +     B / " + ui::name[static_cast<size_t> (db)],
-               { footerFusion.getX() + 18, footerFusion.getY() + 36, footerFusion.getWidth() - 36, 18 },
-               10.0f, ui::secondary);
+        // Routing tiles occupy the upper right; A/B labels stay on the left
+        // in separate rows even at the minimum 1240px editor width.
+        title (g, "A / " + ui::materialLabel (da, french),
+               { footerFusion.getX() + 18, footerFusion.getY() + 32, 139, 17 },
+               10.0f, ui::accentFor (da), true);
+        title (g, "B / " + ui::materialLabel (db, french),
+               { footerFusion.getX() + 18, footerFusion.getY() + 49, 139, 17 },
+               10.0f, ui::accentFor (db), true);
     }
     // Deliberate visual breathing room below the three operational cards.
-    title (g, "Shape Sound. Transform Matter. Create the Impossible.",
+    title (g, ui::word (french, "Façonnez le son. Transformez la matière.",
+                               "Shape Sound. Transform Matter. Create the Impossible."),
            { 23, footerAll.getBottom() + 6, juce::jmin (600, getWidth() - 46), 17 },
            10.0f, ui::subdued);
     title (g, "LIBERTY MUSIC SOFTWARE   /   CORE EDITION",
@@ -684,14 +786,16 @@ void OrganixAudioProcessorEditor::resized()
     visualizer.setBounds (centerBounds);
 
     auto headActions = headerBounds;
-    macroToggle.setBounds (headActions.removeFromRight (85).reduced (4, 25));
+    macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
     engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
-    headActions.removeFromRight (10);
-    const int presetWidth = juce::jmin (390, juce::jmax (210, headActions.getWidth() - 310));
-    auto controlsRect = headActions.removeFromRight (presetWidth);
-    next.setBounds (controlsRect.removeFromRight (35).reduced (2, 25));
-    previous.setBounds (controlsRect.removeFromLeft (35).reduced (2, 25));
-    presets.setBounds (controlsRect.reduced (3, 25));
+    language.setBounds (headActions.removeFromRight (127).reduced (8, 25));
+    headActions.removeFromRight (8);
+    // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
+    auto controlsRect = headActions.removeFromRight (juce::jmin (485, headActions.getWidth() - 315));
+    browserButton.setBounds (controlsRect.removeFromRight (111).reduced (3, 25));
+    next.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
+    previous.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
+    presetDisplay.setBounds (controlsRect.reduced (3, 25));
 
     const auto leftPad = leftBounds.reduced (12, 8);
     const int buttonsY = leftBounds.getY() + 72;
@@ -734,7 +838,7 @@ void OrganixAudioProcessorEditor::resized()
         {
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
-        routing.setVisible (false);
+        routeSelector.setVisible (false);
     }
     else
     {
@@ -743,8 +847,8 @@ void OrganixAudioProcessorEditor::resized()
             d.slider.setVisible (false); d.label.setVisible (false); d.value.setVisible (false);
         }
         // All three panel bounds come from the shared, unit-tested geometry model.
-        routing.setVisible (true);
-        routing.setBounds (footerFusion.getRight() - 174, footerFusion.getY() + 10, 158, 28);
+        routeSelector.setVisible (true);
+        routeSelector.setBounds (footerFusion.getRight() - 252, footerFusion.getY() + 8, 240, 63);
         for (int i = 0; i < 7; ++i)
         {
             auto& d = bottom[static_cast<size_t> (i)];
@@ -754,14 +858,17 @@ void OrganixAudioProcessorEditor::resized()
             const int count = i < 3 ? 3 : 2;
             const int offset = i < 3 ? i : i < 5 ? i - 3 : i - 5;
             const int cellW = (region.getWidth() - 24) / count;
+            const int top = i < 3 ? 76 : 57;
             layoutDial (d, { region.getX() + 12 + offset * cellW,
-                             region.getY() + 57, cellW, region.getHeight() - 62 });
+                             region.getY() + top, cellW, region.getHeight() - top - 5 });
         }
     }
+    if (browser != nullptr) browser->setBounds (getLocalBounds());
 }
 void OrganixAudioProcessorEditor::timerCallback()
 {
     refreshPreset();
+    routeSelector.refresh();
     const int a = activeMaterial (0), b = activeMaterial (1);
     const int signature = a + 6 * b + 36 * selectedLayer +
                           (vParam (audio, "enableB") > 0.5f ? 72 : 0) +
