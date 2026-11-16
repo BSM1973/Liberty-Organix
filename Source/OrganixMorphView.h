@@ -11,6 +11,14 @@ public:
     explicit OrganixMorphPad (OrganixAudioProcessor& processor);
     ~OrganixMorphPad() override;
     void setFrench (bool value) { french = value; repaint(); }
+    void setDrawingEnabled (bool value)
+    {
+        drawingEnabled = value;
+        drafting = false;
+        setMouseCursor (drawingEnabled ? juce::MouseCursor::CrosshairCursor
+                                      : juce::MouseCursor::PointingHandCursor);
+        repaint();
+    }
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
@@ -19,11 +27,14 @@ public:
 private:
     void timerCallback() override;
     void changeXY (juce::Point<float> point);
+    void addDrawPoint (juce::Point<float> point);
     juce::Rectangle<float> field() const;
     OrganixAudioProcessor& audio;
     juce::RangedAudioParameter* xParam = nullptr;
     juce::RangedAudioParameter* yParam = nullptr;
     bool french = true, dragging = false;
+    bool drawingEnabled = false, drafting = false;
+    organix::TrajectoryPath draft;
     float visualX = 0.0f, visualY = 0.0f;
     std::array<juce::Point<float>, 20> trace {};
     int validTrace = 0;

@@ -532,6 +532,7 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     dnaView.setFrench (french);
     morphPad.setFrench (french);
     morphControls.setFrench (french);
+    trajectoryControls.setFrench (french);
     routeSelector.setFrench (french);
     if (browser != nullptr) browser->setFrench (french);
     languageFR.setColour (juce::TextButton::buttonColourId, french ? ui::inset.brighter (0.22f) : ui::surface);
@@ -612,7 +613,7 @@ void OrganixAudioProcessorEditor::refreshMovementState()
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p), morphPad (p), morphControls (p), routeSelector (p)
+    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p), morphPad (p), morphControls (p), trajectoryControls (p), routeSelector (p)
 {
     setLookAndFeel (&lookAndFeel);
     addAndMakeVisible (visualizer);
@@ -622,6 +623,12 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     addAndMakeVisible (morphControls);
     morphPad.setVisible (false);
     morphControls.setVisible (false);
+    addAndMakeVisible (trajectoryControls);
+    trajectoryControls.setVisible (false);
+    trajectoryControls.onDrawingToggled = [this] (bool draw)
+    {
+        morphPad.setDrawingEnabled (draw);
+    };
 
     for (int i = 0; i < 6; ++i)
     {
@@ -844,7 +851,7 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
                                        static_cast<float> (margin.getRight()),
                                        static_cast<float> (headerBounds.getBottom() + 2), 1.0f);
     ui::drawPanel (g, leftBounds);
-    ui::drawPanel (g, rightBounds);
+    if (! morphPage) ui::drawPanel (g, rightBounds);
     if (macroPage || dnaPage || morphPage) ui::drawPanel (g, footerAll);
     else
     {
@@ -865,6 +872,8 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
            { leftBounds.getX() + 27, leftBounds.getBottom() - 43, leftBounds.getWidth() - 35, 20 },
            9.0f, ui::subdued, true);
 
+    if (! morphPage)
+    {
     title (g, ui::word (french, "PROPRIÉTÉS DU MATÉRIAU", "MATERIAL PROPERTIES"), { rightBounds.getX() + 19, rightBounds.getY() + 61,
                                       rightBounds.getWidth() - 38, 18 },
            10.0f, ui::secondary, true);
@@ -880,6 +889,8 @@ void OrganixAudioProcessorEditor::paint (juce::Graphics& g)
     g.setColour (ui::line);
     g.drawLine (static_cast<float> (rightBounds.getX() + 17), static_cast<float> (rightBounds.getBottom() - 33),
                 static_cast<float> (rightBounds.getRight() - 17), static_cast<float> (rightBounds.getBottom() - 33), 1.0f);
+
+    }
 
     if (macroPage)
         title (g, ui::word (french, "HUIT MACROS DE PERFORMANCE", "EIGHT PERFORMANCE MACROS"), { footerAll.getX() + 17, footerAll.getY() + 11,
@@ -936,6 +947,17 @@ void OrganixAudioProcessorEditor::resized()
     dnaView.setVisible (dnaPage);
     morphControls.setBounds (footerAll);
     morphControls.setVisible (morphPage);
+    trajectoryControls.setBounds (rightBounds);
+    trajectoryControls.setVisible (morphPage);
+    tabA.setVisible (! morphPage);
+    tabB.setVisible (! morphPage);
+    enableB.setVisible (! morphPage);
+    for (auto& property : properties)
+    {
+        property.slider.setVisible (! morphPage);
+        property.label.setVisible (! morphPage);
+        property.value.setVisible (! morphPage);
+    }
 
     auto headActions = headerBounds;
     macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));

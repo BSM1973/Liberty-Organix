@@ -7,6 +7,7 @@
 #include "OrganixPresetBrowser.h"
 #include "OrganixMatterDNAView.h"
 #include "OrganixMorphView.h"
+#include "OrganixTrajectoryControls.h"
 #include <array>
 #include <memory>
 
@@ -85,6 +86,7 @@ private:
     OrganixMatterDNAView dnaView;
     OrganixMorphPad morphPad;
     OrganixMorphControls morphControls;
+    OrganixTrajectoryControls trajectoryControls;
     int selectedLayer = 0;
     bool macroPage = false;
     bool dnaPage = false;

@@ -24,3 +24,7 @@ add_test(NAME organix_matter_dna COMMAND organix_matter_dna)
 add_executable(organix_morph_4d morph_4d.cpp ../Source/OrganixMorph4D.cpp ../Source/MaterialDSP.cpp)
 target_compile_features(organix_morph_4d PRIVATE cxx_std_17)
 add_test(NAME organix_morph_4d COMMAND organix_morph_4d)
+
+add_executable(organix_trajectory_designer trajectory_designer.cpp ../Source/OrganixTrajectory.cpp ../Source/OrganixMorph4D.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_trajectory_designer PRIVATE cxx_std_17)
+add_test(NAME organix_trajectory_designer COMMAND organix_trajectory_designer)
