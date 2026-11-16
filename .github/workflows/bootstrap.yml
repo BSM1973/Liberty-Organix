@@ -1,0 +1,80 @@
+name: Initialize Organix sources and validate macOS ARM64
+
+on:
+  push:
+    paths:
+      - '.bootstrap/**'
+      - '.github/workflows/bootstrap.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack-build-and-test:
+    name: Extract original C++ sources, AU and VST3 (macOS ARM64)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Reconstruct the original Organix v0.1 sources
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, json, lzma, pathlib, zlib
+          chunks = sorted(pathlib.Path('.bootstrap').glob('payload-*.txt'))
+          assert len(chunks) == 7, f'Expected seven source parts, found {len(chunks)}'
+          encoded = ''.join(p.read_text(encoding='ascii').strip() for p in chunks)
+          assert len(encoded) == 24024, 'Source bundle length mismatch'
+          assert zlib.crc32(encoded.encode('ascii')) == 0x9426f05c, 'Source bundle CRC32 mismatch'
+          data = json.loads(lzma.decompress(base64.b64decode(encoded)).decode('utf-8'))
+          assert len(data) == 14, f'Expected fourteen source files, found {len(data)}'
+          for name, contents in data.items():
+              path = pathlib.Path(name)
+              assert not path.is_absolute() and '..' not in path.parts
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(contents, encoding='utf-8')
+              print(f'Source restored: {name}')
+          PY
+      - name: Publish unpacked sources to the main repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md CMakeLists.txt Source Tests docs .github/workflows/build.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Import original Organix v0.1 JUCE sources and CI"
+            git push origin HEAD:main
+          fi
+      - name: Confirm native Apple Silicon
+        shell: bash
+        run: |
+          echo "Native architecture: $(uname -m)"
+          test "$(uname -m)" = arm64
+      - name: Configure JUCE 8 (Release / ARM64)
+        run: cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build AU VST3 standalone and DSP tests
+        run: cmake --build build --config Release --parallel 3
+      - name: Execute DSP and preset tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify AU and VST3 binaries are ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          AU="build/Organix_artefacts/Release/AU/Organix.component/Contents/MacOS/Organix"
+          VST="build/Organix_artefacts/Release/VST3/Organix.vst3/Contents/MacOS/Organix"
+          test -f "$AU"
+          test -f "$VST"
+          lipo -archs "$AU" | grep -qw arm64
+          lipo -archs "$VST" | grep -qw arm64
+          ditto -c -k --keepParent build/Organix_artefacts/Release/AU/Organix.component Organix-AU-macOS-arm64.zip
+          ditto -c -k --keepParent build/Organix_artefacts/Release/VST3/Organix.vst3 Organix-VST3-macOS-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Organix-macOS-arm64-bootstrap
+          path: |
+            Organix-AU-macOS-arm64.zip
+            Organix-VST3-macOS-arm64.zip
+          if-no-files-found: error
