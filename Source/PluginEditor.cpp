@@ -487,11 +487,12 @@ void OrganixAudioProcessorEditor::setAudioToggle (const char* id, bool enabled)
 void OrganixAudioProcessorEditor::refreshPreset()
 {
     const int idx = juce::jlimit (0, 99, audio.currentPreset.load (std::memory_order_relaxed));
-    if (lastFactoryPreset != idx)
-    {
-        lastFactoryPreset = idx;
+    const auto custom = audio.parameters.state.getProperty ("customPresetName").toString();
+    if (custom.isNotEmpty())
+        currentPresetName = custom;
+    else if (lastFactoryPreset != idx || currentPresetName.isEmpty())
         currentPresetName = audio.getProgramName (idx);
-    }
+    lastFactoryPreset = idx;
     presetDisplay.setButtonText (currentPresetName.isNotEmpty() ? currentPresetName : audio.getProgramName (idx));
 }
 void OrganixAudioProcessorEditor::openBrowser()
