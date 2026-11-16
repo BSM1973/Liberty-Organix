@@ -78,6 +78,14 @@ int main()
     organix::applyMatterDNA (organix::Material::Vapor, transformed, features, controls);
     if (transformed.density <= base.density || transformed.amount <= base.amount) return 8;
 
+    // Even without a new attack, changing input spectral energy must
+    // influence Crystal's current engine through its resonator excitation.
+    features.transient = 0.0f;
+    transformed = base;
+    organix::applyMatterDNA (organix::Material::Crystal, transformed, features, controls);
+    if (transformed.energy <= base.energy) return 11;
+    features.transient = 0.85f;
+
     for (auto material : {organix::Material::Liquid, organix::Material::Crystal,
                           organix::Material::Plasma, organix::Material::Vapor,
                           organix::Material::Metal, organix::Material::Light})
