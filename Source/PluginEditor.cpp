@@ -1195,7 +1195,7 @@ void OrganixAudioProcessorEditor::resized()
     tabB.setBounds (rightBounds.getX() + 19 + tabW, topY, tabW, 32);
     reactionToggle.setBounds (rightBounds.getX() + 23 + 2 * tabW, topY, tabW, 32);
     matrixToggle.setBounds (rightBounds.getX() + 27 + 3 * tabW, topY, tabW, 32);
-    enableB.setBounds (rightBounds.getRight() - 74, rightBounds.getY() + 62, 57, 20);
+    enableB.setBounds (rightBounds.getRight() - 93, rightBounds.getY() + 61, 75, 27);
 
     auto grid = rightBounds.reduced (15, 8).withTrimmedTop (139).withTrimmedBottom (31);
     for (int row = 0; row < 4; ++row)
