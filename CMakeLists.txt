@@ -76,6 +76,8 @@ endif()
 if (ORGANIX_BUILD_PLUGIN AND BUILD_TESTING)
     add_executable(organix_actual_processor_audio_audit
         Tests/actual_processor_audio_audit.cpp)
+    target_include_directories(organix_actual_processor_audio_audit PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/Organix_artefacts/JuceLibraryCode")
     target_link_libraries(organix_actual_processor_audio_audit PRIVATE
         Organix
         juce::juce_audio_utils)
