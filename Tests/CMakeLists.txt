@@ -32,3 +32,7 @@ add_test(NAME organix_trajectory_designer COMMAND organix_trajectory_designer)
 add_executable(organix_material_reactions material_reactions.cpp ../Source/MaterialReactions.cpp ../Source/MaterialDSP.cpp)
 target_compile_features(organix_material_reactions PRIVATE cxx_std_17)
 add_test(NAME organix_material_reactions COMMAND organix_material_reactions)
+
+add_executable(organix_modulation_matrix modulation_matrix.cpp ../Source/OrganixModMatrix.cpp)
+target_compile_features(organix_modulation_matrix PRIVATE cxx_std_17)
+add_test(NAME organix_modulation_matrix COMMAND organix_modulation_matrix)
