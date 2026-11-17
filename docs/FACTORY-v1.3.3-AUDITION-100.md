@@ -17,8 +17,8 @@ stéréo par `processBlock()` à 48 kHz / 256 échantillons et exporte :
   sont consignées : différence de niveau RMS et différence du signal
   échantillon par échantillon. La deuxième détecte une transformation
   même lorsque les niveaux sont identiques.
-- Seize préécoutes stéréo WAV du moteur complet JUCE, plus longues que le
-  banc de base, pour les presets prioritaires.
+- Cent préécoutes stéréo WAV du moteur complet JUCE : deux secondes
+  chacune, trois secondes pour les seize presets prioritaires.
 - Le statut `PENDING_HUMAN_LISTENING` pour tous les presets.
 
 Il s'agit de sources synthétiques déterministes, pas d'enregistrements
