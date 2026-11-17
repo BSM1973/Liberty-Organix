@@ -13,6 +13,7 @@ OrganixAudioProcessor::OrganixAudioProcessor()
                                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
       parameters (*this, nullptr, "ORGANIX_STATE", makeLayout())
 {
+    initialiseMatrixParameterPointers();
     loadFactoryPreset (0);
 }
 
@@ -55,6 +56,64 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
         juce::StringArray {"1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T"}, 2));
     layout.add (std::make_unique<Bool> (pid ("trajectoryReverse"), "Trajectory Reverse", false));
     add ("trajectoryDepth", "Trajectory XY Depth", 0.0f, 1.0f, 1.0f);
+    // Professional 32-slot modulation matrix: 5 host-automatable controls
+    // for EVERY slot (on, source, destination, signed depth, polarity).
+    layout.add (std::make_unique<Bool> (pid ("matrixEnable"),
+                                        "Modulation Matrix Enabled", false));
+    add ("matrixMasterDepth", "Modulation Master Depth", 0.0f, 1.0f, 0.8f);
+    layout.add (std::make_unique<Bool> (pid ("matrixTempoSync"),
+                                        "Matrix LFO Tempo Sync", false));
+    layout.add (std::make_unique<Choice> (
+        pid ("matrixBeatDivision"), "Matrix LFO Beat Division",
+        juce::StringArray {"1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T"}, 2));
+    for (int i=0; i<4; ++i)
+    {
+        const auto id = juce::String ("matrixLfo") + juce::String (i+1) + "Rate";
+        layout.add (std::make_unique<Float> (
+            juce::ParameterID (id, 1),
+            "Matrix LFO " + juce::String (i+1) + " Hz/Beat Multiplier",
+            juce::NormalisableRange<float> (0.02f,12.0f,0.001f),
+            i==0 ? 0.17f : i==1 ? 0.31f : i==2 ? 0.5f : 0.9f));
+    }
+    for (int i=0; i<2; ++i)
+    {
+        const auto prefix = juce::String ("matrixEnv") + juce::String(i+1);
+        layout.add (std::make_unique<Float> (
+            juce::ParameterID (prefix+"Attack",1),
+            "Matrix Envelope " + juce::String(i+1) + " Attack (s)",
+            juce::NormalisableRange<float>(0.001f,0.5f,0.001f),
+            i==0 ? 0.015f : 0.060f));
+        layout.add (std::make_unique<Float> (
+            juce::ParameterID (prefix+"Decay",1),
+            "Matrix Envelope " + juce::String(i+1) + " Decay (s)",
+            juce::NormalisableRange<float>(0.005f,3.0f,0.001f),
+            i==0 ? 0.32f : 0.8f));
+    }
+    add ("matrixRandomRate", "Matrix Random Rate", 0.05f,10.0f,1.0f);
+    juce::StringArray matrixSources, matrixDestinations;
+    for (int i=0; i<organix::MatrixSettings::sourceCount; ++i)
+        matrixSources.add (juce::String::fromUTF8(
+            organix::ModulationMatrix::sourceName (i,false)));
+    for (int i=0; i<organix::MatrixSettings::destinationCount; ++i)
+        matrixDestinations.add (juce::String::fromUTF8(
+            organix::ModulationMatrix::destinationName (i,false)));
+    for (int i=1; i<=organix::MatrixSettings::slotCount; ++i)
+    {
+        const auto slotName = juce::String ("MM ") + juce::String(i).paddedLeft('0',2);
+        const auto stem = juce::String ("mm") + juce::String(i).paddedLeft('0',2);
+        layout.add (std::make_unique<Bool> (
+            juce::ParameterID(stem+"Enable",1),slotName+" Enabled",false));
+        layout.add (std::make_unique<Choice> (
+            juce::ParameterID(stem+"Source",1),slotName+" Source",matrixSources,0));
+        layout.add (std::make_unique<Choice> (
+            juce::ParameterID(stem+"Target",1),slotName+" Destination",matrixDestinations,0));
+        layout.add (std::make_unique<Float> (
+            juce::ParameterID(stem+"Depth",1),slotName+" Depth",
+            juce::NormalisableRange<float>(-1.0f,1.0f,0.001f),0.0f));
+        layout.add (std::make_unique<Choice> (
+            juce::ParameterID(stem+"Polarity",1),slotName+" Polarity",
+            juce::StringArray {"UNIPOLAR","BIPOLAR"},0));
+    }
     // Matter DNA: analysis is opt-in to preserve all v0.5 sessions.
     layout.add (std::make_unique<Bool> (pid ("dnaEnable"), "Enable Matter DNA", false));
     add ("dnaDepth", "Matter DNA Depth", 0.0f, 1.0f, 0.50f);
@@ -104,12 +163,63 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     return layout;
 }
 
+void OrganixAudioProcessor::initialiseMatrixParameterPointers()
+{
+    for (int i=0; i<organix::MatrixSettings::slotCount; ++i)
+    {
+        const auto stem=juce::String("mm")+juce::String(i+1).paddedLeft('0',2);
+        auto& h=matrixParams[static_cast<size_t>(i)];
+        h.enabled=parameters.getRawParameterValue(stem+"Enable");
+        h.source=parameters.getRawParameterValue(stem+"Source");
+        h.target=parameters.getRawParameterValue(stem+"Target");
+        h.depth=parameters.getRawParameterValue(stem+"Depth");
+        h.bipolar=parameters.getRawParameterValue(stem+"Polarity");
+    }
+}
+organix::MatrixSettings OrganixAudioProcessor::readMatrixSettings() const noexcept
+{
+    organix::MatrixSettings s;
+    auto read = [this] (const char* id) noexcept -> float
+    {
+        if (auto* p=parameters.getRawParameterValue(id))
+            return p->load(std::memory_order_relaxed);
+        return 0.0f;
+    };
+    s.enabled=read("matrixEnable")>0.5f;
+    if (!s.enabled) return s;
+    s.masterDepth=read("matrixMasterDepth");
+    s.tempoSync=read("matrixTempoSync")>0.5f;
+    s.division=juce::jlimit(0,6,static_cast<int>(read("matrixBeatDivision")));
+    s.rates[0]=read("matrixLfo1Rate");
+    s.rates[1]=read("matrixLfo2Rate");
+    s.rates[2]=read("matrixLfo3Rate");
+    s.rates[3]=read("matrixLfo4Rate");
+    s.envAttack[0]=read("matrixEnv1Attack");
+    s.envAttack[1]=read("matrixEnv2Attack");
+    s.envDecay[0]=read("matrixEnv1Decay");
+    s.envDecay[1]=read("matrixEnv2Decay");
+    s.randomRate=read("matrixRandomRate");
+    for (int i=0;i<organix::MatrixSettings::slotCount;++i)
+    {
+        const auto& h=matrixParams[static_cast<size_t>(i)];
+        auto& v=s.slots[static_cast<size_t>(i)];
+        v.enabled=h.enabled!=nullptr && h.enabled->load(std::memory_order_relaxed)>0.5f;
+        if(!v.enabled) continue;
+        v.source=h.source!=nullptr?static_cast<int>(h.source->load(std::memory_order_relaxed)):0;
+        v.destination=h.target!=nullptr?static_cast<int>(h.target->load(std::memory_order_relaxed)):0;
+        v.depth=h.depth!=nullptr?h.depth->load(std::memory_order_relaxed):0.0f;
+        v.bipolar=h.bipolar!=nullptr&&h.bipolar->load(std::memory_order_relaxed)>0.5f;
+    }
+    return s;
+}
+
 void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     juce::ignoreUnused (samplesPerBlock);
     engineA.prepare (sampleRate, getTotalNumInputChannels());
     engineB.prepare (sampleRate, getTotalNumInputChannels());
     matterDNA.prepare (sampleRate);
+    modMatrix.prepare (sampleRate);
     morphRender.prepare (sampleRate, getTotalNumInputChannels());
     reactionLink.prepare (sampleRate);
     reactionActivityAB.store (0.0f, std::memory_order_relaxed);
@@ -144,6 +254,7 @@ void OrganixAudioProcessor::releaseResources()
     engineA.reset();
     engineB.reset();
     matterDNA.reset();
+    modMatrix.reset();
     morphRender.reset();
     reactionLink.reset();
     trajectoryPhase = 0.0f;
@@ -534,6 +645,31 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("reactionAmount", 0.60f);
     setParameter ("reactionDirection", 2.0f);
     setParameter ("reactionResponse", 0.40f);
+    setParameter ("matrixEnable", 0.0f);
+    setParameter ("matrixMasterDepth",0.8f);
+    setParameter ("matrixTempoSync",0.0f);
+    setParameter ("matrixBeatDivision",2.0f);
+    const float defaultRates[]={0.17f,0.31f,0.5f,0.9f};
+    for(int i=1;i<=4;++i)
+    {
+        const auto name=juce::String("matrixLfo")+juce::String(i)+"Rate";
+        setParameter(name.toRawUTF8(),defaultRates[i-1]);
+    }
+    setParameter("matrixEnv1Attack",0.015f);
+    setParameter("matrixEnv2Attack",0.060f);
+    setParameter("matrixEnv1Decay",0.32f);
+    setParameter("matrixEnv2Decay",0.8f);
+    setParameter("matrixRandomRate",1.0f);
+    for(int i=1;i<=organix::MatrixSettings::slotCount;++i)
+    {
+        const auto stem=juce::String("mm")+juce::String(i).paddedLeft('0',2);
+        setParameter((stem+"Enable").toRawUTF8(),0.0f);
+        setParameter((stem+"Source").toRawUTF8(),0.0f);
+        setParameter((stem+"Target").toRawUTF8(),0.0f);
+        setParameter((stem+"Depth").toRawUTF8(),0.0f);
+        setParameter((stem+"Polarity").toRawUTF8(),0.0f);
+    }
+
     setParameter ("trajectoryEnable", 0.0f);
     setParameter ("trajectoryShape", 0.0f);
     setParameter ("trajectorySpeed", 0.25f);
