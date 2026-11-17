@@ -9,6 +9,7 @@
 #include "OrganixMorphView.h"
 #include "OrganixTrajectoryControls.h"
 #include "OrganixReactionPanel.h"
+#include "OrganixModMatrixView.h"
 #include <array>
 #include <memory>
 
@@ -89,11 +90,13 @@ private:
     OrganixMorphControls morphControls;
     OrganixTrajectoryControls trajectoryControls;
     OrganixReactionPanel reactionPanel;
+    OrganixModMatrixView matrixView;
     int selectedLayer = 0;
     bool macroPage = false;
     bool dnaPage = false;
     bool morphPage = false;
     bool reactionPage = false;
+    bool matrixPage = false;
     bool french = true;
     int lastPreset = -1;
     int lastFactoryPreset = -1;
@@ -112,7 +115,7 @@ private:
     juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" },
                      dnaToggle { "ADN" }, morphToggle { "MORPH" };
     juce::TextButton tabA { "LAYER A" }, tabB { "LAYER B" },
-                     reactionToggle { "REACTIONS" };
+                     reactionToggle { "REACTIONS" }, matrixToggle { "MATRICE" };
     juce::TextButton enableB { "B ON" };
     std::array<organix::ui::MaterialButton, 6> materialButtons;
     std::array<Dial, 12> properties;
