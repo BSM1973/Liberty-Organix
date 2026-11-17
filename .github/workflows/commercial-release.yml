@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   signed-macos-pkg:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/organix-notarization-one-click')
     name: Build, validate, sign, notarize, install AU/VST3
     runs-on: macos-15
     timeout-minutes: 120
