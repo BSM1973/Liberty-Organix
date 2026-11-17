@@ -76,6 +76,8 @@ MatterView::MatterView (OrganixAudioProcessor& p) : audio (p)
         return value.getDoubleValue()/100.0;
     };
     transientControl.setDoubleClickReturnValue(true,0.0);
+    transientControl.setComponentID ("midi:spectralTransient");
+    spectrumMode.setComponentID ("midi:spectralCompare");
     addAndMakeVisible(transientControl);
     transientAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         audio.parameters,"spectralTransient",transientControl);
