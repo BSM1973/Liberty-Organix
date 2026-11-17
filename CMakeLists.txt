@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Organix VERSION 1.3.3 LANGUAGES C CXX)
+project(Organix VERSION 1.3.4 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -84,4 +84,13 @@ if (ORGANIX_BUILD_PLUGIN AND BUILD_TESTING)
     target_compile_features(organix_actual_processor_audio_audit PRIVATE cxx_std_17)
     add_test(NAME organix_actual_processor_audio_audit
              COMMAND organix_actual_processor_audio_audit)
+    add_executable(organix_audio_stress
+        Tests/audio_stress_real_processor.cpp)
+    target_include_directories(organix_audio_stress PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/Organix_artefacts/JuceLibraryCode")
+    target_link_libraries(organix_audio_stress PRIVATE
+        Organix
+        juce::juce_audio_utils)
+    target_compile_features(organix_audio_stress PRIVATE cxx_std_17)
+    add_test(NAME organix_audio_stress COMMAND organix_audio_stress)
 endif()
