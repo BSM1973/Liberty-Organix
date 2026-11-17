@@ -451,10 +451,11 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     dial.slider.setRotaryParameters (pi * 1.25f, pi * 2.75f, true);
     dial.slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    const double resetValue = dial.unitMode == 3 ? 1.0
-                            : dial.unitMode == 2 ? 0.25
-                            : dial.unitMode == 0 ? 0.5 : 0.0;
-    dial.slider.setDoubleClickReturnValue (true, resetValue);
+    // Reset to the ACTUAL APVTS default, not a generic 50%/0 dB value.
+    // Dynamic per-material shapes are rebound below in bindProperties().
+    if (auto* param = audio.parameters.getParameter (id))
+        dial.slider.setDoubleClickReturnValue (
+            true, param->convertFrom0to1 (param->getDefaultValue()));
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
@@ -462,12 +463,12 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
-    dial.label.setFont (juce::Font (juce::FontOptions (10.0f, juce::Font::plain)));
+    dial.label.setFont (juce::Font (juce::FontOptions (11.0f, juce::Font::plain)));
     dial.label.setJustificationType (juce::Justification::centred);
     dial.label.setInterceptsMouseClicks (false, false);
 
     dial.value.setJustificationType (juce::Justification::centred);
-    dial.value.setFont (juce::Font (juce::FontOptions (11.5f, juce::Font::bold)));
+    dial.value.setFont (juce::Font (juce::FontOptions (12.5f, juce::Font::bold)));
     dial.value.setColour (juce::Label::textColourId, accent);
     dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
     dial.value.setEditable (true, true, false);
@@ -539,6 +540,9 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
+        if (auto* param = audio.parameters.getParameter (parameterId))
+            dial.slider.setDoubleClickReturnValue (
+                true, param->convertFrom0to1 (param->getDefaultValue()));
         dial.slider.setTooltip (ui::dialTooltip (french, dial.label.getText()) + " / " +
                 ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
                                   selectedLayer == 0 ? "Layer A" : "Layer B") +
@@ -760,7 +764,7 @@ void OrganixAudioProcessorEditor::refreshMovementState()
 }
 
 OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor& p)
-    : AudioProcessorEditor (&p), audio (p), visualizer (p), dnaView (p),
+    : juce::Component(), audio (p), visualizer (p), dnaView (p),
       morphPad (p), morphControls (p), trajectoryControls (p),
       reactionPanel (p), matrixView (p), routeSelector (p)
 {
@@ -987,9 +991,9 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     changeLanguage (french);
     refreshPreset();
     updateMaterialState();
-    setResizable (true, true);
-    setResizeLimits (1240, 820, 1940, 1220);
-    setSize (1504, 1008);
+    // The host-facing editor owns window size. This component is its
+    // logical content and may be uniformly scaled for a small display.
+    setSize (1240, 820);
     startTimerHz (12);
 }
 OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
@@ -1143,12 +1147,15 @@ void OrganixAudioProcessorEditor::resized()
     tabB.setVisible (! morphPage && ! matrixPage);
     reactionToggle.setVisible (! morphPage && ! matrixPage);
     matrixToggle.setVisible (! morphPage && ! matrixPage);
-    enableB.setVisible (! morphPage && ! reactionPage);
+    // Hide controls behind the Matrix overlay instead of leaving invisible
+    // focusable/clickable widgets active under it.
+    const bool showMaterialControls = ! morphPage && ! reactionPage && ! matrixPage;
+    enableB.setVisible (showMaterialControls);
     for (auto& property : properties)
     {
-        property.slider.setVisible (! morphPage && ! reactionPage);
-        property.label.setVisible (! morphPage && ! reactionPage);
-        property.value.setVisible (! morphPage && ! reactionPage);
+        property.slider.setVisible (showMaterialControls);
+        property.label.setVisible (showMaterialControls);
+        property.value.setVisible (showMaterialControls);
     }
 
     auto headActions = headerBounds;
