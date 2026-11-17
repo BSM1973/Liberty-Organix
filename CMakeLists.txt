@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Organix VERSION 0.9.0 LANGUAGES C CXX)
+project(Organix VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -38,6 +38,8 @@ if (ORGANIX_BUILD_PLUGIN)
     )
     juce_generate_juce_header(Organix)
     target_sources(Organix PRIVATE
+        Source/OrganixModMatrix.cpp
+        Source/OrganixModMatrixView.cpp
         Source/OrganixTrajectory.cpp
         Source/OrganixTrajectoryControls.cpp
         Source/OrganixMorph4D.cpp
