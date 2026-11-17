@@ -48,7 +48,7 @@ private:
 };
 
 // Inner interface; the host-facing AudioProcessorEditor is OrganixViewportEditor.
-class OrganixAudioProcessorEditor final : public juce::Component, private juce::Timer
+class OrganixAudioProcessorEditor final : public juce::Component, private juce::Timer, private juce::MouseListener
 {
 public:
     explicit OrganixAudioProcessorEditor (OrganixAudioProcessor&);
@@ -70,6 +70,10 @@ private:
     };
 
     void timerCallback() override;
+    void mouseDown (const juce::MouseEvent&) override;
+    void showMidiTargetMenu();
+    void showMidiContextMenu (const juce::String& parameterId, juce::Component& target);
+    void refreshMidiLearnStatus();
     void setupDial (Dial&, const juce::String& id, const juce::String& title,
                     juce::Colour colour, bool percent = true, int unitMode = -1);
     void bindProperties();
@@ -116,6 +120,7 @@ private:
     juce::TextButton motionFreeButton { "LIBRE" };
     std::unique_ptr<ComboAttachment> trajectoryAttachment, divisionAttachment;
     juce::TextButton presetDisplay { "PRESET" }, browserButton { "BROWSER" };
+    juce::TextButton midiLearnButton { "MIDI" };
     juce::TextButton previous { "<" }, next { ">" };
     OrganixRoutingSelector routeSelector;
     juce::TextButton engaged { "ENGAGED" }, macroToggle { "MACROS" },
