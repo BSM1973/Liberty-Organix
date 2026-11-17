@@ -31,4 +31,4 @@ ditto "$AU" "$HOME/Library/Audio/Plug-Ins/Components/Organix.component"
 killall -9 AudioComponentRegistrar >/dev/null 2>&1 || true
 sleep 4
 auval -a 2>&1 | tee validation-logs/auval-list.txt
-auval -v aufx Orgx LbMs 2>&1 | tee validation-logs/auval-organix.txt
+auval -v aumf Orgx LbMs 2>&1 | tee validation-logs/auval-organix.txt
