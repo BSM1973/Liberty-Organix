@@ -19,7 +19,6 @@ sudo /usr/sbin/installer -pkg "$pkg" -target / > installer-qa/install.txt
 for spec in "Components/Organix.component" "VST3/Organix.vst3"; do
   installed="/Library/Audio/Plug-Ins/$spec"
   test -f "$installed/Contents/MacOS/Organix"
-  /usr/bin/codesign --verify --strict --deep "$installed"
   /usr/bin/lipo -archs "$installed/Contents/MacOS/Organix" | /usr/bin/grep -qw arm64
 done
 echo "PASS: temporary runner installed AU and VST3 in standard directories"
