@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "FactorySoundDesigns.h"
 #include "PluginEditor.h"
 #include <algorithm>
 #include <cmath>
@@ -698,60 +699,139 @@ void OrganixAudioProcessor::setParameter (const char* id, float value)
 
 void OrganixAudioProcessor::loadFactoryPreset (int index)
 {
-    if (index < 0 || index >= static_cast<int> (organix::factoryPresets.size())) return;
-    // Presets are parameterized starting points. Per-preset listening and QA remain pending.
+    if (index < 0 || index >= static_cast<int> (organix::factoryPresets.size()))
+        return;
+
+    // v1.3: ONE hand-authored voice design for EACH of the historical 100 names.
+    // Factory program recall never reads/writes preset lab A/B or undo history.
+    // User presets and existing DAW documents restore their stored state as before.
     const auto& preset = organix::factoryPresets[static_cast<size_t> (index)];
-    const int number = index % 10;
-    const float t = static_cast<float> (number) / 9.0f;
-    const bool subtle = preset.category == 10 || preset.category == 7;
-    const bool aggressive = preset.category == 8 || preset.category == 4;
-    const bool rhythmic = preset.category == 9 || preset.category == 4;
-    const bool ambient = preset.category == 1 || preset.category == 7;
-    const float base = subtle ? 0.19f : aggressive ? 0.75f : ambient ? 0.60f : 0.46f;
-    setParameter ("materialA", static_cast<float> (preset.a));
-    setParameter ("materialB", static_cast<float> (preset.b < 0 ? (static_cast<int> (preset.a) + 1) % 6 : preset.b));
-    setParameter ("enableB", preset.b < 0 ? 0.0f : 1.0f);
-    setParameter ("routing", static_cast<float> (preset.b < 0 ? 0 : rhythmic ? 3 : (index % 3 == 0 ? 1 : 0)));
-    setParameter ("aAmount", clamp01 (base + 0.16f * t));
-    setParameter ("bAmount", clamp01 (base + 0.14f * (1.0f - t)));
-    setParameter ("aMotion", clamp01 ((rhythmic ? 0.70f : ambient ? 0.18f : 0.35f) + 0.24f * t));
-    setParameter ("bMotion", clamp01 ((rhythmic ? 0.55f : ambient ? 0.12f : 0.27f) + 0.20f * (1.0f - t)));
-    setParameter ("aTone", clamp01 (0.15f + 0.68f * (static_cast<float> ((index * 7) % 17) / 16.0f)));
-    setParameter ("bTone", clamp01 (0.2f + 0.6f * (static_cast<float> ((index * 11) % 19) / 18.0f)));
-    setParameter ("aFeedback", subtle ? 0.08f : ambient ? 0.50f : 0.20f + 0.20f * t);
-    setParameter ("bFeedback", subtle ? 0.10f : ambient ? 0.42f : 0.15f + 0.23f * (1.0f - t));
-    setParameter ("balance", 0.32f + 0.33f * t);
-    setParameter ("fusion", aggressive ? 0.65f : subtle ? 0.10f : 0.25f);
-    setParameter ("drywet", subtle ? 0.30f : aggressive ? 0.80f : ambient ? 0.88f : 0.64f);
-    setParameter ("width", 1.0f);
-    setParameter ("motionFree", 1.0f);
-    setParameter ("motionRate", 0.25f);
-    setParameter ("motionTrajectory", 0.0f);
-    setParameter ("motionDivision", 2.0f);
-    setParameter ("morphEnable", 0.0f);
-    setParameter ("morphX", 0.0f);
-    setParameter ("morphY", 0.0f);
+    const auto& design = organix::factorySoundDesigns[static_cast<size_t> (index)];
+    const auto flags = design.technologies;
+    const bool dna = (flags & organix::D) != 0;
+    const bool morph = (flags & (organix::M | organix::T)) != 0;
+    const bool trajectory = (flags & organix::T) != 0 && morph;
+    const bool reactions = (flags & organix::R) != 0;
+    const bool matrix = (flags & organix::X) != 0;
+    const bool rhythmic = preset.category == 4 || preset.category == 9;
+    const bool bass = preset.category == 6;
+    const bool mix = preset.category == 10;
+    const bool paired = preset.b >= 0 || morph || reactions;
+    const int aMaterial = static_cast<int> (preset.a);
+    const int bMaterial = preset.b < 0
+        ? (aMaterial + (design.scenePalette % 3) + 1) % 6 : preset.b;
+
+    setParameter ("materialA", static_cast<float> (aMaterial));
+    setParameter ("materialB", static_cast<float> (bMaterial));
+    setParameter ("enableB", paired ? 1.0f : 0.0f);
+    setParameter ("routing", paired
+        ? static_cast<float> (reactions ? 0 :
+            (design.scenePalette == 4 ? 3 :
+             (design.scenePalette == 2 ? 1 : 0))) : 0.0f);
+    setParameter ("aAmount", design.aAmount);
+    setParameter ("aMotion", design.aMotion);
+    setParameter ("aTone", design.aTone);
+    setParameter ("aFeedback", design.aFeedback);
+    setParameter ("bAmount", design.bAmount);
+    setParameter ("bMotion", design.bMotion);
+    setParameter ("bTone", design.bTone);
+    setParameter ("bFeedback", design.bFeedback);
+    setParameter ("balance", paired
+        ? juce::jlimit (0.20f, 0.80f,
+            0.48f + (design.bAmount - design.aAmount) * 0.23f) : 0.50f);
+    setParameter ("fusion", juce::jlimit (0.05f, 0.70f,
+        0.12f + (design.energy - 0.20f) * 0.44f));
+    setParameter ("drywet", design.wet);
+    setParameter ("width", design.width);
+    setParameter ("input", 0.0f);
+    setParameter ("output", design.outputDb);
+    setParameter ("bypass", 0.0f);
     setParameter ("spectralCompare", 2.0f);
-    setParameter ("spectralTransient", 0.0f);
-    setParameter ("reactionEnable", 0.0f);
-    setParameter ("reactionAmount", 0.60f);
-    setParameter ("reactionDirection", 2.0f);
-    setParameter ("reactionResponse", 0.40f);
-    setParameter ("matrixEnable", 0.0f);
-    setParameter ("matrixMasterDepth",0.8f);
-    setParameter ("matrixTempoSync",0.0f);
-    setParameter ("matrixBeatDivision",2.0f);
-    const float defaultRates[]={0.17f,0.31f,0.5f,0.9f};
+    setParameter ("spectralTransient", design.transient);
+    setParameter ("motionFree", rhythmic ? 0.0f : 1.0f);
+    setParameter ("motionRate", juce::jlimit(0.05f,6.0f,design.speed));
+    setParameter ("motionDivision", rhythmic ? 3.0f : 2.0f);
+    setParameter ("motionTrajectory", rhythmic ? 1.0f : 0.0f);
+
+    // A unique base patch exposes the six meaningful material DSP properties.
+    // The remaining 6 are kept near-neutral: Organix maps them as additional
+    // internally normalized DSP properties, not dummy decorative controls.
+    const float aShapes[12] = {
+        design.aTone, design.aMotion, design.density,
+        design.energy, design.aAmount,
+        juce::jlimit(0.0f,1.0f,design.aFeedback*1.10f),
+        design.aTone, design.energy,
+        design.aMotion, design.density, design.aAmount, 0.50f
+    };
+    const float bShapes[12] = {
+        design.bTone, design.bMotion, design.density,
+        design.energy, design.bAmount,
+        juce::jlimit(0.0f,1.0f,design.bFeedback*1.10f),
+        design.bTone, design.energy,
+        design.bMotion, design.density, design.bAmount, 0.50f
+    };
+    for (int i=0;i<12;++i)
+    {
+        const auto suffix=juce::String(i+1).paddedLeft('0',2);
+        setParameter((juce::String("aShape")+suffix).toRawUTF8(),aShapes[i]);
+        setParameter((juce::String("bShape")+suffix).toRawUTF8(),bShapes[i]);
+    }
+
+    // Explicit sonic intentions give the eight macros genuinely varied states.
+    // They are never randomized during factory program loading.
+    setParameter("macroTransform",juce::jlimit(0.0f,1.0f,
+        0.48f+(design.aAmount-design.bAmount)*0.22f));
+    setParameter("macroMotion",juce::jlimit(0.0f,1.0f,
+        0.48f+(design.aMotion-design.bMotion)*0.30f));
+    setParameter("macroEnergy",design.energy);
+    setParameter("macroDensity",design.density);
+    setParameter("macroSpace",juce::jlimit(0.0f,1.0f,
+        0.48f+(design.width-1.0f)*0.28f));
+    setParameter("macroHarmonics",juce::jlimit(0.0f,1.0f,
+        0.50f+(design.aTone-design.bTone)*0.22f));
+    setParameter("macroEvolution",juce::jlimit(0.0f,1.0f,
+        0.48f+design.speed*0.14f));
+    setParameter("macroFusion",0.50f);
+
+    setParameter("dnaEnable",dna?1.0f:0.0f);
+    setParameter("dnaDepth",design.dnaDepth);
+    setParameter("dnaSensitivity",juce::jlimit(0.20f,0.76f,
+        0.32f+design.energy*0.30f));
+    setParameter("dnaCrystalAttack",preset.a==organix::Material::Crystal
+        ? 0.73f : 0.39f);
+    setParameter("dnaVaporAir",preset.a==organix::Material::Vapor
+        ? 0.76f : 0.37f);
+    setParameter("dnaEnergyMotion",rhythmic?0.64f:0.35f);
+    setParameter("dnaSpectralTone",juce::jlimit(0.10f,0.48f,
+        0.20f+design.aTone*0.26f));
+
+    setParameter("reactionEnable",reactions?1.0f:0.0f);
+    setParameter("reactionAmount",design.reactionDepth);
+    setParameter("reactionDirection",reactions
+        ? (design.scenePalette==4?2.0f:0.0f) : 2.0f);
+    setParameter("reactionResponse",rhythmic?0.20f:0.46f);
+
+    // Reset the complete 32-route matrix, not just its global Enable.
+    // Otherwise recalling a different factory preset could retain old slots.
+    setParameter("matrixEnable",0.0f);
+    setParameter("matrixMasterDepth",matrix?0.48f:0.80f);
+    setParameter("matrixTempoSync",rhythmic?1.0f:0.0f);
+    setParameter("matrixBeatDivision",rhythmic?3.0f:2.0f);
+    const float lfoRates[]={
+        juce::jlimit(0.06f,4.0f,design.speed),
+        0.33f,0.54f,0.82f
+    };
     for(int i=1;i<=4;++i)
     {
         const auto name=juce::String("matrixLfo")+juce::String(i)+"Rate";
-        setParameter(name.toRawUTF8(),defaultRates[i-1]);
+        setParameter(name.toRawUTF8(),lfoRates[i-1]);
     }
-    setParameter("matrixEnv1Attack",0.015f);
+    setParameter("matrixEnv1Attack",rhythmic?0.008f:0.030f);
+    setParameter("matrixEnv1Decay",rhythmic?0.20f:0.42f);
     setParameter("matrixEnv2Attack",0.060f);
-    setParameter("matrixEnv1Decay",0.32f);
-    setParameter("matrixEnv2Decay",0.8f);
-    setParameter("matrixRandomRate",1.0f);
+    setParameter("matrixEnv2Decay",0.74f);
+    setParameter("matrixRandomRate",juce::jlimit(0.10f,4.0f,
+        design.speed*1.7f));
     for(int i=1;i<=organix::MatrixSettings::slotCount;++i)
     {
         const auto stem=juce::String("mm")+juce::String(i).paddedLeft('0',2);
@@ -761,49 +841,96 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
         setParameter((stem+"Depth").toRawUTF8(),0.0f);
         setParameter((stem+"Polarity").toRawUTF8(),0.0f);
     }
-
-    setParameter ("trajectoryEnable", 0.0f);
-    setParameter ("trajectoryShape", 0.0f);
-    setParameter ("trajectorySpeed", 0.25f);
-    setParameter ("trajectoryFree", 1.0f);
-    setParameter ("trajectoryDivision", 2.0f);
-    setParameter ("trajectoryReverse", 0.0f);
-    setParameter ("trajectoryDepth", 1.0f);
-    // Safe neutral recall: v0.5 factory presets remain unchanged by Matter DNA.
-    setParameter ("dnaEnable", 0.0f);
-    setParameter ("dnaDepth", 0.5f);
-    setParameter ("dnaSensitivity", 0.5f);
-    setParameter ("dnaCrystalAttack", 0.8f);
-    setParameter ("dnaVaporAir", 0.8f);
-    setParameter ("dnaEnergyMotion", 0.4f);
-    setParameter ("dnaSpectralTone", 0.25f);
-    setParameter ("input", 0.0f);
-    setParameter ("output", aggressive ? -4.0f : -1.5f);
-    setParameter ("bypass", 0.0f);
-    setParameter ("macroTransform", 0.5f);
-    setParameter ("macroMotion", 0.5f);
-    setParameter ("macroEnergy", aggressive ? 0.76f : 0.42f + t * 0.2f);
-    setParameter ("macroDensity", ambient ? 0.75f : 0.3f + 0.4f * t);
-    setParameter ("macroSpace", 0.5f);
-    setParameter ("macroHarmonics", 0.5f);
-    setParameter ("macroEvolution", 0.5f);
-    setParameter ("macroFusion", 0.5f);
-    // Factory presets v0.1 predate the twelve-property system. Reset new controls to
-    // neutral on recall so existing presets sound stable; individual sound design is pending.
-    for (int i = 1; i <= 12; ++i)
+    if(matrix)
     {
-        const auto suffix = juce::String (i).paddedLeft ('0', 2);
-        setParameter ((juce::String ("aShape") + suffix).toRawUTF8(), 0.5f);
-        setParameter ((juce::String ("bShape") + suffix).toRawUTF8(), 0.5f);
+        const auto setRoute=[this](int slot,int source,int target,
+                                   float depth,bool bipolar)
+        {
+            const auto stem=juce::String("mm")+juce::String(slot).paddedLeft('0',2);
+            setParameter((stem+"Source").toRawUTF8(),static_cast<float>(source));
+            setParameter((stem+"Target").toRawUTF8(),static_cast<float>(target));
+            setParameter((stem+"Depth").toRawUTF8(),depth);
+            setParameter((stem+"Polarity").toRawUTF8(),bipolar?1.0f:0.0f);
+            setParameter((stem+"Enable").toRawUTF8(),1.0f);
+        };
+        setRoute(1,design.modulationSource,design.modulationTarget,
+                 design.modulationDepth,true);
+        // A restrained, independent second connection improves expressivity
+        // without hiding a large unrelated 32-slot random matrix.
+        const int secondTarget = bass ? 3 : mix ? 39 :
+            (design.modulationTarget<=18?21:3);
+        const int secondSource = rhythmic ? 8 : 7;
+        setRoute(2,secondSource,secondTarget,
+                 (design.modulationDepth>=0.0f?0.12f:-0.12f),false);
+        setParameter("matrixEnable",1.0f);
     }
-    // A factory preset clears any displayed user-preset identity in host state.
-    parameters.state.removeProperty ("customPresetName", nullptr);
-    currentPreset.store (index);
-    // New factory patch starts with all four scenes matching its sound.
-    for (int i = 0; i < 4; ++i) captureMorphScene (i);
-    setTrajectoryPath ({}, true);
-}
 
+    setParameter("morphEnable",0.0f);
+    setParameter("morphX",0.0f);
+    setParameter("morphY",0.0f);
+    setParameter("trajectoryEnable",0.0f);
+    setParameter("trajectoryShape",static_cast<float>(design.trajectoryShape));
+    setParameter("trajectorySpeed",design.speed);
+    setParameter("trajectoryFree",rhythmic?0.0f:1.0f);
+    setParameter("trajectoryDivision",rhythmic?3.0f:2.0f);
+    setParameter("trajectoryReverse",design.scenePalette==2?1.0f:0.0f);
+    setParameter("trajectoryDepth",trajectory?0.66f:0.0f);
+
+    // Four deliberately contrasting *independent DSP scenes*. Not four
+    // identical copies of the same A/B mixture as in older factory banks.
+    const auto baseScene=captureCurrentMorphScene();
+    for(int i=0;i<4;++i)
+    {
+        auto scene=baseScene;
+        if(morph && i>0)
+        {
+            const float depth=design.scenePalette==3?0.075f:0.16f;
+            const float value=i==1?1.0f:i==2?-1.0f:0.45f;
+            scene.a.tone=clamp01(scene.a.tone+value*depth);
+            scene.b.tone=clamp01(scene.b.tone-value*depth*0.70f);
+            scene.a.motion=clamp01(scene.a.motion+(i==3?0.15f:-0.04f));
+            scene.b.motion=clamp01(scene.b.motion+(i==2?0.15f:-0.03f));
+            scene.a.amount=clamp01(scene.a.amount+(i==1?-0.05f:0.06f));
+            scene.b.amount=clamp01(scene.b.amount+(i==2?-0.07f:0.03f));
+            scene.fusion=clamp01(scene.fusion+(i==3?0.12f:-0.04f));
+            scene.balance=clamp01(scene.balance+(i==1?-0.14f:
+                                            i==2?0.13f:0.04f));
+            scene.width=juce::jlimit(0.75f,bass?1.05f:1.40f,
+                scene.width+(i==1?0.03f:i==2?-0.07f:0.07f));
+            // The five curated palettes determine which sonic materials can
+            // change between scenes; subtle and bass programs stay stable.
+            if(design.scenePalette==1 && i==2)
+                scene.materialB=static_cast<int>(organix::Material::Light);
+            if(design.scenePalette==2 && i==3)
+                scene.materialB=static_cast<int>(organix::Material::Crystal);
+            if(design.scenePalette==4 && i==3)
+            {
+                scene.materialA=static_cast<int>(organix::Material::Metal);
+                scene.materialB=static_cast<int>(organix::Material::Plasma);
+                scene.routing=3;
+            }
+        }
+        publishMorphScene(i,scene,true);
+    }
+
+    organix::TrajectoryPath path;
+    if(trajectory && design.trajectoryShape==3)
+    {
+        path.count=5;
+        path.points[0]={0.12f,0.38f};
+        path.points[1]={0.37f,0.81f};
+        path.points[2]={0.75f,0.62f};
+        path.points[3]={0.82f,0.16f};
+        path.points[4]={0.31f,0.24f};
+    }
+    setTrajectoryPath(path,true);
+    // Turn enabling on LAST, after all scene/path/mailbox changes are ready.
+    setParameter("morphEnable",morph?1.0f:0.0f);
+    setParameter("trajectoryEnable",trajectory?1.0f:0.0f);
+    parameters.state.removeProperty("customPresetName",nullptr);
+    parameters.state.setProperty("factorySoundDesignVersion",3,nullptr);
+    currentPreset.store(index,std::memory_order_relaxed);
+}
 organix::MorphScene OrganixAudioProcessor::captureCurrentMorphScene() const noexcept
 {
     auto read = [this] (const char* name) noexcept
