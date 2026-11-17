@@ -93,6 +93,22 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 6
+      - name: Stress actual JUCE audio callback over 48 configurations
+        shell: bash
+        run: |
+          set -euo pipefail
+          STRESS="build/Tests/Release/organix_audio_stress"
+          if [ ! -x "$STRESS" ]; then STRESS="build/Release/organix_audio_stress"; fi
+          test -x "$STRESS"
+          "$STRESS" --report stress-report
+          test "$(wc -l < stress-report/organix_audio_stress.csv | tr -d ' ')" = "49"
+      - name: Publish realtime CPU and click-discontinuity stress report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-Audio-Stress-48-Cases-v${{ steps.version.outputs.number }}
+          path: stress-report/organix_audio_stress.csv
+          if-no-files-found: error
+          retention-days: 90
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
