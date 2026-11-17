@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Liberty Music Software UI text gate.
+"""Organix UI typography preflight.
 
-Reject damaged UTF-8, mojibake, non-printing controls and font-dependent
-decorative glyphs inside C++ UI string literals. Legitimate French accents
-are encouraged. This is a reusable guardrail, not a font replacement.
+Catch damaged UTF-8, mojibake, decomposed French accents and font-dependent
+symbol characters before the AU/VST3 builds. This is a static gate; a visual
+review inside real DAWs is still required for platform font fallback.
 """
 from __future__ import annotations
 
@@ -14,31 +14,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Source"
-UI_FILES = [
-    "PluginEditor.cpp",
-    "OrganixRoutingSelector.h",
-    "OrganixPresetBrowser.cpp",
-    "OrganixMaterialButton.h",
-    "OrganixI18n.h",
-    "OrganixMatterDNAView.cpp",
-    "OrganixMatterDNAView.h",
-    "OrganixMorphView.cpp",
-    "OrganixMorphView.h",
-    "OrganixTrajectoryControls.cpp",
-    "OrganixTrajectoryControls.h",
-    "OrganixReactionPanel.cpp",
-    "OrganixReactionPanel.h",
-    "OrganixModMatrixView.cpp",
-    "OrganixModMatrixView.h",
-    "OrganixPresetLabCore.h",
-    "OrganixPresetLabView.cpp",
-    "OrganixPresetLabView.h",
-    "OrganixSpectralView.cpp",
-    "OrganixSpectralView.h",
-]
-# These are known to render as missing-glyph boxes or stray symbols on some
-# hosts/fonts. Use ASCII or draw vector icons rather than font characters.
+
+# Discover newly added Organix UI pages automatically. Also scan shared
+# Organix components that can contribute string data to the visible UI.
+UI_FILES = sorted(
+    path for path in SOURCE.iterdir()
+    if path.is_file()
+    and path.suffix in {".cpp", ".h"}
+    and (path.name.startswith("Organix") or path.name.startswith("PluginEditor"))
+)
+
+# Plain ASCII symbols and vector shapes drawn by JUCE are reliable across hosts.
+# Characters in these ranges may turn into tofu/boxes in DAW menu fonts.
 DISALLOWED = {
+    0x00A0: "non-breaking space",
     0x00B7: "middle dot",
     0x00D7: "multiplication sign",
     0x2018: "curly apostrophe",
@@ -46,41 +35,65 @@ DISALLOWED = {
     0x2013: "en dash",
     0x2014: "em dash",
     0x2026: "ellipsis",
-    0x2190: "left arrow",
-    0x2192: "right arrow",
-    0x2605: "star",
-    0x2606: "hollow star",
     0xFFFD: "replacement character",
-    0x00A0: "non-breaking space",
 }
+FRENCH_LETTERS = set(
+    "ÀÂÄÆÇÉÈÊËÎÏÔÖŒÙÛÜŸàâäæçéèêëîïôöœùûüÿ"
+)
+KNOWN_SPELLING = {"Francais": "Français", "ALEATOIRE": "ALÉATOIRE"}
 STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"')
 errors: list[str] = []
 
-for filename in UI_FILES:
-    path = SOURCE / filename
+if not UI_FILES:
+    errors.append("No Organix source files found: UI typography gate did not run")
+
+for path in UI_FILES:
+    filename = path.relative_to(ROOT)
     try:
         content = path.read_text(encoding="utf-8", errors="strict")
     except (OSError, UnicodeError) as exc:
-        errors.append(f"{path.relative_to(ROOT)}: invalid UTF-8: {exc}")
+        errors.append(f"{filename}: invalid UTF-8: {exc}")
         continue
+    if content.startswith("\ufeff"):
+        errors.append(f"{filename}: remove UTF-8 BOM")
     for number, line in enumerate(content.splitlines(), 1):
         if any(fragment in line for fragment in ("\ufffd", "Ã", "â€")):
-            errors.append(f"{filename}:{number}: suspicious mojibake / replacement")
+            errors.append(f"{filename}:{number}: mojibake or replacement character")
         for match in STRING_LITERAL.finditer(line):
             literal = match.group(0)
             if unicodedata.normalize("NFC", literal) != literal:
-                errors.append(f"{filename}:{number}: use NFC for accented letters")
+                errors.append(f"{filename}:{number}: normalize accents to NFC")
+            for spelling, correction in KNOWN_SPELLING.items():
+                if re.search(rf"(?<![A-Za-z]){re.escape(spelling)}(?![A-Za-z])", literal):
+                    errors.append(
+                        f"{filename}:{number}: use '{correction}', not '{spelling}'"
+                    )
             for char in literal:
                 point = ord(char)
-                if point in DISALLOWED or (
-                    unicodedata.category(char) == "Cf"
-                ):
-                    reason = DISALLOWED.get(point, "format/zero-width character")
-                    errors.append(f"{filename}:{number}: forbidden {reason} U+{point:04X}")
+                if point in DISALLOWED:
+                    reason = DISALLOWED[point]
+                elif char.isascii():
+                    continue
+                elif char in FRENCH_LETTERS:
+                    continue
+                elif (0x2190 <= point <= 0x27BF
+                      or 0x1F300 <= point <= 0x1FAFF):
+                    reason = "arrow, geometric symbol or emoji: draw with JUCE"
+                elif unicodedata.category(char) in {"Cf", "Cc"}:
+                    reason = "hidden or non-printing Unicode character"
+                else:
+                    reason = "non-Latin glyph outside approved FR/EN labels"
+                errors.append(
+                    f"{filename}:{number}: {reason} U+{point:04X}"
+                )
 
 if errors:
-    print("FAIL: Liberty UI typography / Unicode preflight")
-    for message in errors:
-        print(" -", message)
+    print("FAIL: Organix typography / Unicode preflight")
+    for error in errors:
+        print(" -", error)
     sys.exit(1)
-print("PASS: valid UTF-8/NFC, real French accents, no fragile glyphs in UI labels")
+
+print(
+    f"PASS: {len(UI_FILES)} Organix source files checked; "
+    "UTF-8/NFC, FR accents, no fragile glyphs"
+)
