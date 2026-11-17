@@ -475,11 +475,26 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.value.setTooltip (ui::preciseValueTooltip (french));
     dial.value.onTextChange = [&dial]
     {
-        double value = dial.value.getText().getDoubleValue();
+        // Accept French decimal commas and optional %, dB, Hz suffixes.
+        // Malformed input must never silently reset an audio parameter to 0.
+        const auto entered = dial.value.getText().trim().replaceCharacter (',', '.')
+                                              .retainCharacters ("0123456789+-.");
+        if (entered.isEmpty() || entered == "." || entered == "-" || entered == "+")
+        {
+            dial.slider.onValueChange();
+            return;
+        }
+        double value = entered.getDoubleValue();
+        if (! std::isfinite (value))
+        {
+            dial.slider.onValueChange();
+            return;
+        }
         if (dial.unitMode == 0 || dial.unitMode == 3) value /= 100.0;
         dial.slider.setValue (juce::jlimit (dial.slider.getMinimum(),
                                           dial.slider.getMaximum(), value),
                               juce::sendNotificationSync);
+        dial.slider.onValueChange();
     };
     dial.slider.onValueChange = [&dial]
     {
@@ -488,7 +503,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
         switch (dial.unitMode)
         {
             case 0:
-            case 3: text = juce::String (juce::roundToInt (value * 100.0)) + "%"; break;
+            case 3: text = juce::String (value * 100.0, 1) + "%"; break;
             case 2: text = juce::String (value, 2) + " Hz"; break;
             default: text = juce::String (value, 1) + " dB"; break;
         }
