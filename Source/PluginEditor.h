@@ -48,7 +48,7 @@ private:
 };
 
 // Inner interface; the host-facing AudioProcessorEditor is OrganixViewportEditor.
-class OrganixAudioProcessorEditor final : public juce::Component, private juce::Timer, private juce::MouseListener
+class OrganixAudioProcessorEditor final : public juce::Component, private juce::Timer
 {
 public:
     explicit OrganixAudioProcessorEditor (OrganixAudioProcessor&);
