@@ -73,6 +73,26 @@ jobs:
           test -x build/Tests/Release/organix_factory_sound_designs
           build/Tests/Release/organix_factory_sound_designs --export factory-audition/factory_sound_design_manifest.csv
           test "$(wc -l < factory-audition/factory_sound_design_manifest.csv | tr -d ' ')" = "101"
+      - name: Render all 100 presets through real Organix JUCE processBlock
+        shell: bash
+        run: |
+          set -euo pipefail
+          AUDIT="build/Tests/Release/organix_actual_processor_audio_audit"
+          if [ ! -x "$AUDIT" ]; then AUDIT="build/Release/organix_actual_processor_audio_audit"; fi
+          test -x "$AUDIT"
+          "$AUDIT" --render processor-audition
+          test "$(find processor-audition -name '*_real_processor.wav' | wc -l | tr -d ' ')" = "16"
+          test "$(wc -l < processor-audition/organix_real_processor_100_QA.csv | tr -d ' ')" = "101"
+      - name: Publish 16 priority audition WAVs and 100 complete-plugin QA measures
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-Real-Processor-100-QA-16-WAV-v${{ steps.version.outputs.number }}
+          path: |
+            processor-audition/*.wav
+            processor-audition/organix_real_processor_100_QA.csv
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
