@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginProcessor.h"
 #include "OrganixI18n.h"
+#include "OrganixPresetLabView.h"
 #include <functional>
 #include <memory>
 #include <vector>
@@ -33,6 +34,7 @@ private:
     void listBoxItemDoubleClicked (int row, const juce::MouseEvent&) override;
     void rebuildResults (bool preserveSelection = true);
     void updateSelection();
+    void setLabOpen(bool open);
     void applySelection();
     void toggleFavorite();
     void saveCurrent();
@@ -44,14 +46,15 @@ private:
 
     OrganixAudioProcessor& audio;
     juce::PropertiesFile& settings;
-    bool french = true, favoritesOnly = false;
+    bool french = true, favoritesOnly = false, labOpen = false;
     std::vector<Entry> library, results;
     juce::StringArray favoriteKeys;
     juce::Rectangle<int> panelBounds;
     juce::TextEditor search, saveName;
-    juce::ComboBox category, material, origin;
+    juce::ComboBox category, material, origin, character;
     juce::TextButton favoriteOnlyButton, favoriteButton, loadButton, saveButton,
-                     importButton, exportButton, closeButton;
+                     importButton, exportButton, closeButton, labButton;
+    OrganixPresetLabView lab;
     juce::ListBox list;
     juce::Label countLabel, messageLabel;
     std::unique_ptr<juce::FileChooser> chooser;
