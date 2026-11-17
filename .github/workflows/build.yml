@@ -66,6 +66,13 @@ jobs:
           build/Tests/Release/organix_factory_audio_audit --render factory-audition
           test "$(find factory-audition -name '*.wav' | wc -l | tr -d ' ')" = "100"
           test -s factory-audition/factory_preset_audio_qa.csv
+      - name: Export full 100-preset feature and parameter manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x build/Tests/Release/organix_factory_sound_designs
+          build/Tests/Release/organix_factory_sound_designs --export factory-audition/factory_sound_design_manifest.csv
+          test "$(wc -l < factory-audition/factory_sound_design_manifest.csv | tr -d ' ')" = "101"
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
@@ -112,6 +119,7 @@ jobs:
           path: |
             factory-audition/*.wav
             factory-audition/factory_preset_audio_qa.csv
+            factory-audition/factory_sound_design_manifest.csv
           if-no-files-found: error
           retention-days: 90
           compression-level: 6

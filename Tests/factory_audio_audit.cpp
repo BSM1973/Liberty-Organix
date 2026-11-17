@@ -1,4 +1,6 @@
 #include "../Source/FactoryPresets.h"
+#include "../Source/FactorySoundDesigns.h"
+#include "../Source/MaterialReactions.h"
 #include "../Source/MaterialDSP.h"
 #include <algorithm>
 #include <array>
@@ -95,35 +97,51 @@ Measure render(int index,int seconds,std::vector<float>* samples)
 {
     using namespace organix;
     const auto& preset=factoryPresets[static_cast<size_t>(index)];
-    const int number=index%10;
-    const float t=static_cast<float>(number)/9.0f;
-    const bool subtle=preset.category==10||preset.category==7;
-    const bool aggressive=preset.category==8||preset.category==4;
-    const bool rhythmic=preset.category==9||preset.category==4;
-    const bool ambient=preset.category==1||preset.category==7;
-    const float base=subtle?0.19f:aggressive?0.75f:ambient?0.60f:0.46f;
-    const float balance=0.32f+0.33f*t;
-    const float fusion=aggressive?0.65f:subtle?0.10f:0.25f;
-    const float wet=subtle?0.30f:aggressive?0.80f:ambient?0.88f:0.64f;
-    const float outputGain=std::pow(10.0f,(aggressive?-4.0f:-1.5f)/20.0f);
-    const int routing=preset.b<0?0:rhythmic?3:index%3==0?1:0;
+    const auto& design=factorySoundDesigns[static_cast<size_t>(index)];
+    const bool pair=preset.b>=0||(design.technologies&(M|T|R))!=0;
+    const bool reactions=(design.technologies&R)!=0;
+    const float balance=std::clamp(0.48f+
+        (design.bAmount-design.aAmount)*0.23f,0.20f,0.80f);
+    const float fusion=std::clamp(0.12f+
+        (design.energy-0.20f)*0.44f,0.05f,0.70f);
+    const int routing=pair
+        ? (reactions?0:(design.scenePalette==4?3:
+                         design.scenePalette==2?1:0)):0;
+    const float outputGain=std::pow(10.0f,design.outputDb/20.0f);
     Parameters a,b;
-    a.amount=clamp01(base+0.16f*t);
-    b.amount=clamp01(base+0.14f*(1.0f-t));
-    a.motion=clamp01((rhythmic?0.70f:ambient?0.18f:0.35f)+0.24f*t);
-    b.motion=clamp01((rhythmic?0.55f:ambient?0.12f:0.27f)+0.20f*(1.0f-t));
-    a.tone=clamp01(0.15f+0.68f*((index*7)%17)/16.0f);
-    b.tone=clamp01(0.2f+0.6f*((index*11)%19)/18.0f);
-    a.feedback=subtle?0.08f:ambient?0.50f:0.20f+0.20f*t;
-    b.feedback=subtle?0.10f:ambient?0.42f:0.15f+0.23f*(1.0f-t);
-    a.energy=b.energy=aggressive?0.76f:0.42f+t*0.2f;
-    a.density=b.density=ambient?0.75f:0.3f+0.4f*t;
+    a.amount=design.aAmount;
+    a.motion=design.aMotion;
+    a.tone=design.aTone;
+    a.feedback=design.aFeedback;
+    b.amount=design.bAmount;
+    b.motion=design.bMotion;
+    b.tone=design.bTone;
+    b.feedback=design.bFeedback;
+    a.energy=b.energy=design.energy;
+    a.density=b.density=design.density;
+    a.shape={{design.aTone,design.aMotion,design.density,design.energy,
+              design.aAmount,std::clamp(design.aFeedback*1.10f,0.0f,1.0f),
+              design.aTone,design.energy,design.aMotion,design.density,
+              design.aAmount,0.5f}};
+    b.shape={{design.bTone,design.bMotion,design.density,design.energy,
+              design.bAmount,std::clamp(design.bFeedback*1.10f,0.0f,1.0f),
+              design.bTone,design.energy,design.bMotion,design.density,
+              design.bAmount,0.5f}};
     MaterialDSP dspA,dspB;
     dspA.prepare(sampleRate,1);
     dspB.prepare(sampleRate,1);
+    const int materialA=static_cast<int>(preset.a);
+    const int materialB=preset.b>=0?preset.b:
+        (materialA+(design.scenePalette%3)+1)%6;
     dspA.configure(preset.a,a);
-    dspB.configure(static_cast<Material>(preset.b<0?
-                   (static_cast<int>(preset.a)+1)%6:preset.b),b);
+    dspB.configure(static_cast<Material>(materialB),b);
+    MaterialReactionLink reactionLink;
+    reactionLink.prepare(sampleRate);
+    ReactionControls controls;
+    controls.enabled=reactions;
+    controls.amount=design.reactionDepth;
+    controls.direction=design.scenePalette==4?2:0;
+    controls.response=(preset.category==4||preset.category==9)?0.20f:0.46f;
     const int count=seconds*sampleRate;
     if(samples){samples->clear();samples->reserve(static_cast<size_t>(count));}
     double squares=0,inputSquares=0,differences=0,peak=0;
@@ -131,18 +149,11 @@ Measure render(int index,int seconds,std::vector<float>* samples)
     {
         const float x=sourceSample(preset.category,i);
         float fx=0.0f;
-        if(preset.b<0)fx=dspA.process(0,x);
-        else if(routing==1)fx=dspB.process(0,dspA.process(0,x));
-        else if(routing==2)fx=dspA.process(0,dspB.process(0,x));
-        else
-        {
-            const float ya=dspA.process(0,x);
-            const float yb=dspB.process(0,x);
-            fx=ya*(1.0f-balance)+yb*balance;
-            if(routing==3)
-                fx+=fusion*0.27f*std::tanh(3.0f*ya*yb);
-        }
-        const float y=(x*(1.0f-wet)+fx*wet)*outputGain;
+        if(!pair)fx=dspA.process(0,x);
+        else fx=reactionLink.process(dspA,dspB,
+                preset.a,static_cast<Material>(materialB),routing,
+                balance,fusion,0,x,controls);
+        const float y=(x*(1.0f-design.wet)+fx*design.wet)*outputGain;
         if(!std::isfinite(y))throw std::runtime_error(
             "nonfinite output "+std::to_string(index));
         squares+=static_cast<double>(y)*y;
@@ -154,8 +165,7 @@ Measure render(int index,int seconds,std::vector<float>* samples)
     const double n=static_cast<double>(count);
     return {std::sqrt(squares/n),peak,std::sqrt(differences/n),
             std::sqrt(inputSquares/n),peak>=0.999};
-}
-}
+}}
 int main(int argc,char** argv)
 {
     const bool save=argc==3&&std::string(argv[1])=="--render";
@@ -170,7 +180,7 @@ int main(int argc,char** argv)
     {
         report.open(destination/"factory_preset_audio_qa.csv");
         if(!report)throw std::runtime_error("Cannot save QA CSV");
-        report<<"number,name,category,source,output_rms_dbfs,peak_dbfs,crest_db,delta_rms_dbfs,suggested_trim_db,flag\n";
+        report<<"number,name,category,source,technologies_mask,output_rms_dbfs,peak_dbfs,crest_db,delta_rms_dbfs,suggested_trim_db,flag\n";
     }
     int silent=0,nonfinite=0,peaky=0,low=0;
     double smallest=1.0e6,largest=-1.0e6;
@@ -197,7 +207,8 @@ int main(int argc,char** argv)
             const auto& p=organix::factoryPresets[static_cast<size_t>(i)];
             std::string flag=m.clipped?"NEAR_0DBFS":tooLow?"LOW_LEVEL":"CHECK_BY_EAR";
             report<<i+1<<",\""<<p.name<<"\","<<p.category
-                  <<",SYNTHETIC_48KHZ,"
+                  <<",SYNTHETIC_48KHZ_BASE_DSP,"
+                  <<static_cast<int>(organix::factorySoundDesigns[static_cast<size_t>(i)].technologies)<<","
                   <<rmsDb<<","<<peakDb<<","<<peakDb-rmsDb
                   <<","<<deltaDb<<","<<proposedTrim<<","<<flag<<"\n";
             const char indexBuffer[8]={};
@@ -207,7 +218,7 @@ int main(int argc,char** argv)
             wav(destination/filename,preview);
         }
     }
-    std::cout<<"DSP QA: 100 factory preset foundations, RMS range "
+    std::cout<<"DSP QA: 100 individually authored DSP foundations, RMS range "
              <<smallest<<".."<<largest
              <<" dBFS; silent="<<silent
              <<" low(-35dB)="<<low
