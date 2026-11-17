@@ -60,7 +60,7 @@ inline constexpr std::array<FactorySoundDesign,100> factorySoundDesigns {{
 {.43f,.13f,.71f,.25f,.41f,.19f,.44f,.13f, .48f,1.03f,-3.1f,.49f,.35f, D|X,0,8,3,.47f,.00f,.16f,.28f,.12f,0}, // Crystal Strings
 {.73f,.44f,.65f,.20f,.45f,.23f,.41f,.18f, .61f,1.00f,-5.9f,.83f,.40f, D|X,2,8,3,.38f,.00f,.23f,.39f,.17f,0}, // Electric Guitar Storm
 {.43f,.12f,.48f,.27f,.47f,.18f,.61f,.26f, .67f,1.19f,-4.7f,.38f,.76f, D|M|T,1,7,21,.34f,.00f,-.04f,.17f,.15f,1}, // Ambient Guitar Clouds
-{.47f,.21f,.57f,.22f,.34f,.13f,.42f,.17f, .48f,.99f,-3.9f,.62f,.38f, D|X,0,8,5,.42f,.00f,.20f,.25f,.17f,0}, // Metallic Strings
+{.47f,.21f,.57f,.22f,.34f,.13f,.42f,.17f, .48f,.99f,-3.9f,.62f,.38f, D|X,0,8,6,.42f,.00f,.20f,.25f,.17f,0}, // Metallic Strings
 {.42f,.19f,.81f,.18f,.37f,.14f,.69f,.15f, .51f,1.10f,-3.4f,.49f,.47f, D|T,0,9,3,.38f,.00f,.10f,.17f,.12f,0}, // Luminous Guitar
 {.52f,.13f,.41f,.26f,.47f,.11f,.60f,.22f, .71f,1.24f,-4.8f,.43f,.81f, D|M|T,1,9,21,.40f,.00f,-.11f,.14f,.13f,3}, // Infinite Guitar Pad
 {.56f,.14f,.45f,.24f,.55f,.15f,.58f,.19f, .64f,1.20f,-4.0f,.48f,.70f, D|M|R|T,0,7,21,.37f,.27f,-.05f,.09f,.15f,1}, // Oceanic Guitar
@@ -82,7 +82,7 @@ inline constexpr std::array<FactorySoundDesign,100> factorySoundDesigns {{
 {.51f,.44f,.72f,.18f,.38f,.31f,.47f,.12f, .62f,1.08f,-3.9f,.67f,.46f, D|X|T,2,1,3,.44f,.00f,.13f,.31f,.23f,0}, // Crystal Arpeggios
 {.77f,.58f,.71f,.13f,.46f,.21f,.50f,.17f, .65f,1.03f,-6.1f,.88f,.41f, D|X|R,2,8,3,.43f,.52f,.24f,.55f,.26f,4}, // Plasma Synth Reactor
 {.51f,.16f,.41f,.33f,.49f,.16f,.65f,.22f, .77f,1.31f,-4.4f,.53f,.82f, D|M|T|X,1,9,5,.41f,.00f,-.04f,.14f,.21f,1}, // Vapor Synth Clouds
-{.58f,.40f,.59f,.22f,.48f,.23f,.42f,.18f, .65f,1.10f,-5.6f,.77f,.46f, D|X,2,11,3,.38f,.00f,.15f,.41f,.23f,2}, // Metallic Oscillations
+{.58f,.40f,.59f,.22f,.48f,.23f,.42f,.18f, .65f,1.10f,-5.6f,.77f,.46f, D|X,2,1,6,.38f,.00f,.15f,.41f,.23f,2}, // Metallic Oscillations
 {.44f,.28f,.85f,.19f,.41f,.21f,.68f,.17f, .63f,1.21f,-4.3f,.59f,.55f, D|X|M,0,9,21,.43f,.00f,.08f,.26f,.18f,2}, // Spectral Illumination
 {.63f,.35f,.55f,.21f,.59f,.26f,.81f,.17f, .73f,1.22f,-5.7f,.77f,.50f, D|M|R|T|X,2,12,37,.48f,.37f,.18f,.23f,.23f,4}, // Future Dimension
 {.49f,.17f,.78f,.23f,.55f,.29f,.41f,.19f, .61f,1.09f,-4.5f,.57f,.40f, D|R|M,0,1,3,.46f,.28f,.07f,.19f,.14f,3}, // Glasswave Synth

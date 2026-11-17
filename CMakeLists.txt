@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(Organix VERSION 1.3.2 LANGUAGES C CXX)
+project(Organix VERSION 1.3.3 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -69,4 +69,19 @@ if (ORGANIX_BUILD_PLUGIN)
         PUBLIC juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags
     )
+endif()
+
+# Headless audition through the complete OrganixAudioProcessor::processBlock.
+# Links the SAME JUCE shared-code target used by AU/VST3 and Standalone.
+if (ORGANIX_BUILD_PLUGIN AND BUILD_TESTING)
+    add_executable(organix_actual_processor_audio_audit
+        Tests/actual_processor_audio_audit.cpp)
+    target_include_directories(organix_actual_processor_audio_audit PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}/Organix_artefacts/JuceLibraryCode")
+    target_link_libraries(organix_actual_processor_audio_audit PRIVATE
+        Organix
+        juce::juce_audio_utils)
+    target_compile_features(organix_actual_processor_audio_audit PRIVATE cxx_std_17)
+    add_test(NAME organix_actual_processor_audio_audit
+             COMMAND organix_actual_processor_audio_audit)
 endif()
