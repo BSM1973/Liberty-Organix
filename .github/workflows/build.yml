@@ -58,6 +58,14 @@ jobs:
         run: cmake --build build --config Release --parallel 2
       - name: Run DSP and factory preset tests
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Render and measure all 100 factory DSP preview sounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -x build/Tests/Release/organix_factory_audio_audit
+          build/Tests/Release/organix_factory_audio_audit --render factory-audition
+          test "$(find factory-audition -name '*.wav' | wc -l | tr -d ' ')" = "100"
+          test -s factory-audition/factory_preset_audio_qa.csv
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
@@ -97,3 +105,13 @@ jobs:
           DOWNLOADED_ARTIFACT_DIR: verified-download
         run: python3 tools/verify_downloadable_artifact.py published
 
+      - name: Publish 100 synthetic source factory sound previews and measured QA CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-100-Factory-Audition-and-QA-v${{ steps.version.outputs.number }}
+          path: |
+            factory-audition/*.wav
+            factory-audition/factory_preset_audio_qa.csv
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 6
