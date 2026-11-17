@@ -1,6 +1,6 @@
 #include "PluginProcessor.h"
 #include "FactorySoundDesigns.h"
-#include "PluginEditor.h"
+#include "OrganixViewportEditor.h"
 #include <algorithm>
 #include <cmath>
 #include <chrono>
@@ -1152,5 +1152,5 @@ void OrganixAudioProcessor::setStateInformation (const void* data, int size)
     }
 }
 
-juce::AudioProcessorEditor* OrganixAudioProcessor::createEditor() { return new OrganixAudioProcessorEditor (*this); }
+juce::AudioProcessorEditor* OrganixAudioProcessor::createEditor() { return new OrganixViewportEditor (*this); }
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new OrganixAudioProcessor(); }
