@@ -226,11 +226,7 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     matterDNA.prepare (sampleRate);
     spectralView.prepare (sampleRate);
     audioCpuPercent.store (0.0f,std::memory_order_relaxed);
-    transientFast.fill (0.0f); transientSlow.fill (0.0f);
-    transientFastCoefficient = 1.0f-std::exp (
-        -1.0f/static_cast<float> (std::max(1.0,sampleRate)*0.0018));
-    transientSlowCoefficient = 1.0f-std::exp (
-        -1.0f/static_cast<float> (std::max(1.0,sampleRate)*0.045));
+    transientShaper.prepare(sampleRate);
     transientDepthSmooth.reset (sampleRate,0.025);
     transientDepthSmooth.setCurrentAndTargetValue (
         raw(parameters,"spectralTransient"));
@@ -270,7 +266,7 @@ void OrganixAudioProcessor::releaseResources()
     engineB.reset();
     matterDNA.reset();
     spectralView.reset();
-    transientFast.fill (0.0f); transientSlow.fill (0.0f);
+    transientShaper.reset();
     audioCpuPercent.store (0.0f,std::memory_order_relaxed);
     modMatrix.reset();
     morphRender.reset();
@@ -642,35 +638,12 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                  morph * morphFraction) * gain;
             const float out = std::abs (mixed) < 0.96f
                 ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
-            float effect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
-            // Optional real transient shaping of the processed signal, after
-            // all 4D/material/matrix processing and before the bypass blend.
-            // 0% is strictly neutral, including for existing saved sessions.
-            if (std::abs(transientDepth)>0.00001f)
-            {
-                const float amplitude=std::abs(effect);
-                auto& fast=transientFast[static_cast<size_t>(ch)];
-                auto& slow=transientSlow[static_cast<size_t>(ch)];
-                fast+=(amplitude-fast)*transientFastCoefficient;
-                slow+=(amplitude-slow)*transientSlowCoefficient;
-                const float onset=juce::jlimit(0.0f,1.0f,
-                    (fast-slow)/(0.06f+slow*1.2f));
-                const float gain=transientDepth>=0.0f
-                    ?1.0f+transientDepth*onset*0.9f
-                    :1.0f+transientDepth*onset*0.75f;
-                effect=std::tanh(effect*gain);
-            }
-            else
-            {
-                // Keep detection running so switching the control on does not
-                // start with stale envelope state after a long silent period.
-                const float amplitude=std::abs(effect);
-                auto& fast=transientFast[static_cast<size_t>(ch)];
-                auto& slow=transientSlow[static_cast<size_t>(ch)];
-                fast+=(amplitude-fast)*transientFastCoefficient;
-                slow+=(amplitude-slow)*transientSlowCoefficient;
-            }
-            const float destination = originals[ch] * (1.0f - active) + effect * active;
+            const float effect = std::isfinite(out)
+                ?juce::jlimit(-1.0f,1.0f,out):0.0f;
+            // Stereo attack is modified in the actual wet DSP path. The
+            // host bypass mix remains neutral; parameter 0 is bit-exact.
+            const float shaped=transientShaper.process(ch,effect,transientDepth);
+            const float destination = originals[ch] * (1.0f - active) + shaped * active;
             if (ch == 0) left[i] = destination;
             else right[i] = destination;
             outputSquare += static_cast<double> (destination) * destination;
