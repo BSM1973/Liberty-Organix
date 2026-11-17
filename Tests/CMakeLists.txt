@@ -8,6 +8,10 @@ add_test(NAME organix_preset_registry COMMAND organix_preset_registry)
 add_executable(organix_material_controls material_controls.cpp ../Source/MaterialDSP.cpp)
 target_compile_features(organix_material_controls PRIVATE cxx_std_17)
 add_test(NAME organix_material_controls COMMAND organix_material_controls)
+add_executable(organix_material_switch_guard
+    material_switch_guard.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_material_switch_guard PRIVATE cxx_std_17)
+add_test(NAME organix_material_switch_guard COMMAND organix_material_switch_guard)
 
 add_executable(organix_ui_geometry ui_geometry.cpp)
 target_compile_features(organix_ui_geometry PRIVATE cxx_std_17)

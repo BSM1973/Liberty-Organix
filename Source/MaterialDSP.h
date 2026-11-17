@@ -73,6 +73,12 @@ private:
         float oscX[modes] {};
         float oscY[modes] {};
         float lastModeExcitation = 0.0f;
+        // Preallocated per-channel transition envelope: eliminates the
+        // abrupt first sample when an existing engine changes material.
+        float lastOutput = 0.0f;
+        float switchAnchor = 0.0f;
+        int switchSamples = 0;
+        bool hasRendered = false;
         std::array<Grain, grainVoices> grains {};
         int samplesUntilGrain = 0;
         unsigned rng = 0x1A2B3C4Du;
@@ -98,5 +104,10 @@ private:
     Parameters p;
     double fs = 44100.0;
     int delayLength = 1;
+    int switchFadeLength = 240; // 5 ms at 48 kHz; set during prepare()
+    // Only recompute the resonator's transcendental coefficients when their
+    // real acoustic drivers change; modulation may call configure per block.
+    float modeTone = -1.0f, modeFeedback = -1.0f;
+    Material modeMaterial = Material::Liquid;
 };
 }
