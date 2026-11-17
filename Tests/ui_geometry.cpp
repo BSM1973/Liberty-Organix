@@ -103,16 +103,20 @@ static bool accepts (int width, int height)
     const int trajectoryControlWidth = g.right.w - 2 * trajectoryRightPadding;
     if (trajectoryControlWidth < 300 || trajectoryBottom > g.right.h - 22 ||
         g.right.intersects (g.center) || g.right.intersects (g.footer)) return false;
-    // Three right-panel tabs replace the old two without overlapping.
-    // The reaction inspector uses the same panel but hides property dials.
-    const int tabWidth = (g.right.w - 48) / 3;
+    // Four right-panel tabs (A/B/REACTIONS/MATRIX) remain independent.
+    // MATRIX opens a full-width overlay below the header, not a fifth
+    // button crammed into the top toolbar.
+    const int tabWidth = (g.right.w - 52) / 4;
     const Rect tabA {g.right.x + 15, g.right.y + 12, tabWidth, 32};
     const Rect tabB {g.right.x + 19 + tabWidth, g.right.y + 12, tabWidth, 32};
     const Rect reactTab {g.right.x + 23 + 2 * tabWidth, g.right.y + 12, tabWidth, 32};
+    const Rect matrixTab {g.right.x + 27 + 3 * tabWidth, g.right.y + 12, tabWidth, 32};
     const Rect reactionPanel {g.right.x + 10, g.right.y + 50,
                               g.right.w - 20, g.right.h - 58};
-    if (tabWidth < 98 || tabA.intersects (tabB) ||
+    if (tabWidth < 73 || tabA.intersects (tabB) ||
         tabB.intersects (reactTab) ||
+        reactTab.intersects (matrixTab) ||
+        matrixTab.right() > g.right.right() ||
         tabA.intersects (reactTab) ||
         reactTab.intersects (reactionPanel) ||
         reactionPanel.intersects (g.center) ||
@@ -132,6 +136,21 @@ static bool accepts (int width, int height)
     if (power.intersects (direction) || direction.intersects (amount) ||
         amount.intersects (response) || response.intersects (cardAB) ||
         cardAB.intersects (cardBA) || cardBA.intersects (finalText)) return false;
+    const Rect matrixWorkspace {g.left.x,g.left.y,
+                                g.right.right()-g.left.x,
+                                g.footer.bottom()-g.left.y};
+    const int sidebarX=matrixWorkspace.w-316;
+    const int matrixListColWidth=(sidebarX-35)/2;
+    const int matrixListBottom=184+16*25;
+    if (matrixWorkspace.w < 1190 ||
+        matrixWorkspace.h < 650 ||
+        matrixWorkspace.y < g.header.bottom() ||
+        matrixWorkspace.right() > width ||
+        matrixWorkspace.bottom() > height ||
+        matrixListColWidth < 370 ||
+        matrixListBottom + 37 > matrixWorkspace.h ||
+        // Four envelope sliders end at y=474+3*33+29.
+        474 + 3*33+29 > matrixWorkspace.h-22) return false;
     return true;
 }
 int main()
