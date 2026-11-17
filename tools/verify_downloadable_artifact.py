@@ -99,12 +99,12 @@ def verify_published() -> None:
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
             output.write(
-                "\\n## BUILD AU/VST3 VALIDÉ ET TÉLÉCHARGEABLE\\n"
+                "\n## BUILD AU/VST3 VALIDÉ ET TÉLÉCHARGEABLE\n"
                 f"**[TÉLÉCHARGER ORGANIX AU + VST3]"
-                f"(https://github.com/{repo}/actions/runs/{run}/artifacts/{artifact_id})**\\n\\n"
-                f"Archive : \\u0060{expected_name}\\u0060. "
+                f"(https://github.com/{repo}/actions/runs/{run}/artifacts/{artifact_id})**\n\n"
+                f"Archive : `{expected_name}`. "
                 "Vérification : téléchargement officiel GitHub Actions par ID, "
-                "intégrité des deux ZIP et présence des binaires macOS.\\n"
+                "intégrité des deux ZIP et présence des binaires macOS.\n"
             )
 
 
