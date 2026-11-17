@@ -339,7 +339,7 @@ void OrganixPresetLabView::paint(juce::Graphics& g)
         g.fillRoundedRectangle(static_cast<float>(x),348.0f,
                                static_cast<float>(col),103.0f,5.0f);
         heading(g,"V"+juce::String(i+1),{x+11,354,col-22,19},
-                12.0f,ui::accentFor(i),true);
+                12.0f,ui::accentFor(i));
     }
     heading(g,ui::word(french,
         "MATERIALS, ROUTAGE ET GAINS RESTENT INCHANGÉS. L'ÉCOUTE FINALE SE FAIT DANS LE DAW.",
