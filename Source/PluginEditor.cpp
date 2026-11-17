@@ -39,12 +39,52 @@ void polygon (juce::Path& path, float cx, float cy, float radius,
 
 MatterView::MatterView (OrganixAudioProcessor& p) : audio (p)
 {
-    setInterceptsMouseClicks (true, false);
+    setInterceptsMouseClicks (true, true);
+    spectrumMode.setColour(juce::TextButton::buttonColourId,ui::inset);
+    spectrumMode.setColour(juce::TextButton::textColourOffId,ui::accentFor(0));
+    spectrumMode.onClick=[this]
+    {
+        const int current=juce::jlimit(0,2,
+            static_cast<int>(vParam(audio,"spectralCompare")));
+        if(auto* param=audio.parameters.getParameter("spectralCompare"))
+        {
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(
+                static_cast<float>((current+1)%3)));
+            param->endChangeGesture();
+        }
+        repaint();
+    };
+    addAndMakeVisible(spectrumMode);
+    transientLabel.setColour(juce::Label::textColourId,ui::secondary);
+    transientLabel.setFont(juce::Font(juce::FontOptions(9.5f)));
+    transientLabel.setJustificationType(juce::Justification::centredLeft);
+    addAndMakeVisible(transientLabel);
+    transientControl.setSliderStyle(juce::Slider::LinearHorizontal);
+    transientControl.setTextBoxStyle(juce::Slider::TextBoxRight,false,44,23);
+    transientControl.setColour(juce::Slider::trackColourId,ui::accentFor(4));
+    transientControl.setColour(juce::Slider::thumbColourId,ui::accentFor(4));
+    transientControl.setColour(juce::Slider::textBoxTextColourId,ui::text);
+    transientControl.setColour(juce::Slider::textBoxBackgroundColourId,ui::inset);
+    transientControl.setColour(juce::Slider::textBoxOutlineColourId,ui::border);
+    transientControl.textFromValueFunction=[](double value)
+    {
+        return juce::String(juce::roundToInt(value*100.0))+"%";
+    };
+    transientControl.valueFromTextFunction=[](const juce::String& value)
+    {
+        return value.getDoubleValue()/100.0;
+    };
+    transientControl.setDoubleClickReturnValue(true,0.0);
+    addAndMakeVisible(transientControl);
+    transientAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        audio.parameters,"spectralTransient",transientControl);
     startTimerHz (30);
 }
 MatterView::~MatterView()
 {
     stopTimer();
+    transientAttachment.reset();
     if (gestureX != nullptr) gestureX->endChangeGesture();
     if (gestureY != nullptr) gestureY->endChangeGesture();
 }
@@ -53,6 +93,14 @@ void MatterView::timerCallback()
     // All animation work stays on the GUI message thread. No buffer or
     // allocation is introduced in processBlock().
     if (! isShowing()) return;
+    const int displayMode=juce::jlimit(0,2,
+        static_cast<int>(vParam(audio,"spectralCompare")));
+    const char* modesFR[]={"AVANT","APRÈS","AVANT / APRÈS"};
+    const char* modesEN[]={"INPUT","OUTPUT","BEFORE / AFTER"};
+    spectrumMode.setButtonText(juce::String::fromUTF8(
+        french?modesFR[displayMode]:modesEN[displayMode]));
+    transientLabel.setText(ui::word(french,"TRANSITOIRES","TRANSIENTS"),
+                           juce::dontSendNotification);
     const int id = juce::jlimit (0, 5, static_cast<int> (
         vParam (audio, layer == 0 ? "materialA" : "materialB")));
     if (priorMaterial != id)
@@ -71,6 +119,13 @@ void MatterView::timerCallback()
     if (clock >= 1000.0f) clock -= 1000.0f;
     materialReveal = juce::jmin (1.0f, materialReveal + 0.10f);
     repaint();
+}
+void MatterView::resized()
+{
+    const int width=getWidth();
+    transientLabel.setBounds(153,89,96,25);
+    transientControl.setBounds(250,89,157,26);
+    spectrumMode.setBounds(width-137,89,117,26);
 }
 void MatterView::setXY (juce::Point<float> point)
 {
@@ -116,7 +171,14 @@ void MatterView::paint (juce::Graphics& g)
     const float dnaTransient = dnaEnabled ? audio.dnaTransient.load (std::memory_order_relaxed) : 0.0f;
     const float dnaAir = dnaEnabled ? audio.dnaAir.load (std::memory_order_relaxed) : 0.0f;
     const float dnaSpectralMotion = dnaEnabled ? audio.dnaMotion.load (std::memory_order_relaxed) : 0.0f;
-    const float energy = juce::jlimit (0.0f, 1.0f, visualRms + dnaEnergy * 0.18f);
+    const auto displayStream=organix::SpectralViewAnalyzer::Stream::After;
+    const float realEnergy=audio.spectralView.energy(displayStream);
+    const float realAttack=audio.spectralView.transient(displayStream);
+    const float spectralAir=audio.spectralView.brightness(displayStream);
+    const float spectralCentre=audio.spectralView.centroid(displayStream);
+    const float spectralFlux=audio.spectralView.motion(displayStream);
+    const float energy = juce::jlimit(0.0f,1.0f,
+        visualRms*0.35f+realEnergy*0.65f+dnaEnergy*0.10f);
     const float peak = visualPeak;
     const float xControl = vParam (audio, layer == 0 ? "aShape03" : "bShape03");
     const float yControl = vParam (audio, layer == 0 ? "aShape08" : "bShape08");
@@ -139,20 +201,28 @@ void MatterView::paint (juce::Graphics& g)
     g.setColour (ui::border); g.drawLine (20.0f, 84.0f, rect.getRight() - 20.0f, 84.0f, 1.0f);
     title (g, ui::word (french, "SURFACE DU MATÉRIAU", "MATERIAL SURFACE"), whole.withTrimmedLeft (24).withTrimmedTop (89).withHeight (24),
            10.0f, ui::subdued);
-    title (g, dnaEnabled ? ui::word (french, "ADN ACTIF / ANALYSE FFT", "DNA ON / LIVE FFT")
-                         : ui::word (french, "DSP TEMPS RÉEL / RÉACTIF AU SON",
-                                            "LIVE DSP / AUDIO-REACTIVE"),
-           whole.withTrimmedRight (24).withTrimmedTop (89).withHeight (24),
-           10.0f, ui::secondary, false, juce::Justification::centredRight);
+    // FFT and transient controls occupy the title row without hiding
+    // the six material skins; the compare button is a genuine APVTS control.
 
     const float top = 125.0f, bottom = rect.getHeight() - 89.0f;
     const float plotH = juce::jmax (20.0f, bottom - top);
     const float cx = rect.getCentreX() + (xControl - 0.5f) * rect.getWidth() * 0.13f;
     const float cy = top + plotH * 0.5f - (yControl - 0.5f) * plotH * 0.16f;
     const float dnaShape = id == 1 ? dnaTransient : id == 3 ? dnaAir : dnaSpectralMotion;
+    // Every existing skin responds to the analyzed output, but retains its
+    // unique shape, stroke palette, interaction coordinates and animation.
+    const float styleSpectrum =
+        id==0 ? (1.0f-spectralAir)*realEnergy :
+        id==1 ? realAttack :
+        id==2 ? spectralFlux :
+        id==3 ? spectralAir :
+        id==4 ? realAttack*0.8f+spectralCentre*0.2f :
+                spectralAir*0.75f+spectralCentre*0.25f;
     const float radius = juce::jmin (rect.getWidth() * 0.235f, plotH * 0.33f) *
-                         (0.9f + energy * 0.18f + dnaShape * 0.08f);
-    const float wobble = 0.045f + 0.13f * energy + dnaShape * 0.07f;
+                         (0.86f + energy * 0.20f + dnaShape * 0.04f +
+                          styleSpectrum * 0.14f);
+    const float wobble = 0.035f + 0.08f * energy +
+                         dnaShape * 0.03f + styleSpectrum * 0.13f;
     g.setColour (ui::line.withAlpha (0.8f));
     for (int n = -4; n <= 4; ++n)
     {
@@ -164,6 +234,41 @@ void MatterView::paint (juce::Graphics& g)
         const float y = cy + n * plotH * 0.17f;
         g.drawLine (28.0f, y, rect.getWidth() - 28.0f, y, 0.7f);
     }
+    // Actual Hann FFT magnitude curves: 48 log-spaced frequency bands.
+    // Two paths overlay before/after without modifying the six signatures.
+    // Separate curves are based on their own analysis of host I/O buffers.
+    const int compare=juce::jlimit(0,2,
+        static_cast<int>(vParam(audio,"spectralCompare")));
+    const float sx=31.0f,sw=rect.getWidth()-62.0f;
+    const float sy=top+13.0f,sh=juce::jmin(80.0f,plotH*0.21f);
+    for(int stream=0;stream<2;++stream)
+    {
+        if(compare==0 && stream==1)continue;
+        if(compare==1 && stream==0)continue;
+        const auto channel=stream==0
+            ?organix::SpectralViewAnalyzer::Stream::Before
+            :organix::SpectralViewAnalyzer::Stream::After;
+        juce::Path curve;
+        for(int k=0;k<organix::SpectralViewAnalyzer::displayBands;++k)
+        {
+            const float amplitude=audio.spectralView.band(channel,k);
+            const float px=sx+sw*k/(organix::SpectralViewAnalyzer::displayBands-1);
+            const float py=sy+sh*(1.0f-juce::jlimit(0.0f,1.0f,amplitude));
+            if(k==0)curve.startNewSubPath(px,py);
+            else curve.lineTo(px,py);
+        }
+        g.setColour(stream==0?ui::secondary.withAlpha(0.70f):
+                    accent.withAlpha(0.95f));
+        g.strokePath(curve,juce::PathStrokeType(stream==0?1.3f:2.1f));
+    }
+    title(g,ui::word(french,"FFT 1024 / 48 BANDES","FFT 1024 / 48 BANDS"),
+          {static_cast<int>(sx),static_cast<int>(sy+sh)+4,184,15},
+          9.0f,ui::secondary,true);
+    title(g,ui::word(french,"GRAVE    /    MÉDIUM    /    AIGU",
+                                  "LOW    /    MID    /    HIGH"),
+          {getWidth()-272,static_cast<int>(sy+sh)+4,243,15},
+          9.0f,ui::secondary,false,juce::Justification::centredRight);
+
     g.setColour (accent.withAlpha (0.18f));
     g.drawEllipse (cx - radius * 1.1f, cy - radius * 1.1f, radius * 2.2f, radius * 2.2f, 1.0f);
 
@@ -310,21 +415,23 @@ void MatterView::paint (juce::Graphics& g)
     const auto input = toDb (audio.inputRms.load (std::memory_order_relaxed));
     const auto output = toDb (audio.outputRms.load (std::memory_order_relaxed));
     const auto outPeak = toDb (audio.outputPeak.load (std::memory_order_relaxed));
-    const int colW = juce::jmax (80, (getWidth() - 40) / 3);
+    const int colW = juce::jmax (85, (getWidth() - 40) / 4);
     const juce::String metric[] = {
         ui::word (french, "ENTRÉE RMS", "INPUT RMS"),
         ui::word (french, "SORTIE RMS", "OUTPUT RMS"),
-        ui::word (french, "CRÊTE SORTIE", "PEAK OUT")
+        ui::word (french, "CRÊTE SORTIE", "PEAK OUT"),
+        ui::word (french, "DSP / BUDGET", "DSP / BUDGET")
     };
-    const float vals[] = { input, output, outPeak };
-    for (int i = 0; i < 3; ++i)
+    const float vals[] = { input, output, outPeak,
+        audio.audioCpuPercent.load(std::memory_order_relaxed) };
+    for (int i = 0; i < 4; ++i)
     {
         const int x = 23 + i * colW;
         title (g, metric[i], { x, static_cast<int> (meterY) + 9, colW - 12, 15 },
                9.0f, ui::subdued, true);
-        title (g, juce::String (vals[i], 1) + " dBFS",
+        title (g, juce::String (vals[i], 1) + (i==3?" %":" dBFS"),
                { x, static_cast<int> (meterY) + 27, colW - 12, 22 },
-               15.0f, ui::text);
+               15.0f, i==3 && vals[i]>80.0f?ui::accentFor(4):ui::text);
     }
 }
 
