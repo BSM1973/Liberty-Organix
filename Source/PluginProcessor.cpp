@@ -281,6 +281,8 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const auto channels = std::min (2, buffer.getNumChannels());
     const int n = buffer.getNumSamples();
     if (channels <= 0 || n <= 0) return;
+    const auto matrixSettings=readMatrixSettings();
+    const bool matrixOn=matrixSettings.enabled;
 
     const bool activeB = raw (parameters, "enableB") > 0.5f;
     organix::ReactionControls reactions;
@@ -316,7 +318,7 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     b.density = density;
     organix::MatterDNA::Features dnaFeatures;
     const bool dnaIsEnabled = raw (parameters, "dnaEnable") > 0.5f;
-    if (dnaIsEnabled)
+    if (dnaIsEnabled || matrixOn)
     {
         const auto* dnaLeft = buffer.getReadPointer (0);
         const auto* dnaRight = channels == 2 ? buffer.getReadPointer (1) : nullptr;
@@ -365,6 +367,15 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     }
     engineA.configure (aMaterial, a);
     if (activeB) engineB.configure (bMaterial, b);
+    // The matrix generates offsets from immutable incoming audio only.
+    // It never modifies APVTS base parameter values or captured scenes.
+    const std::array<float,8> matrixMacros {{
+        raw(parameters,"macroTransform"),raw(parameters,"macroMotion"),
+        raw(parameters,"macroEnergy"),raw(parameters,"macroDensity"),
+        raw(parameters,"macroSpace"),raw(parameters,"macroHarmonics"),
+        raw(parameters,"macroEvolution"),raw(parameters,"macroFusion")
+    }};
+    float matrixFusion=fusion, matrixBalance=balance;
 
     // Consume coherent scene snapshots from lock-free atomic mailboxes. A
     // mid-write snapshot is skipped this block rather than blocking audio.
@@ -432,10 +443,10 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     morphXSmooth.setTargetValue (morphXTarget);
     morphYSmooth.setTargetValue (morphYTarget);
     const bool renderMorph = morphEnabled || morphBlendSmooth.getCurrentValue() > 0.00001f;
+    organix::MatterDNAControls morphDNA;
+    morphDNA.enabled = dnaIsEnabled;
     if (renderMorph)
     {
-        organix::MatterDNAControls morphDNA;
-        morphDNA.enabled = dnaIsEnabled;
         if (dnaIsEnabled)
         {
             morphDNA.depth = raw (parameters, "dnaDepth");
@@ -454,8 +465,9 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 currentXY, trajectoryDepth)
             : organix::TrajectoryPoint {morphXSmooth.getCurrentValue(),
                                         morphYSmooth.getCurrentValue()};
-        morphRender.configure (configureXY.x, configureXY.y,
-                               dnaFeatures, morphDNA, reactions);
+        if (!matrixOn)
+            morphRender.configure (configureXY.x, configureXY.y,
+                                   dnaFeatures, morphDNA, reactions);
     }
 
     const float inputGain = juce::Decibels::decibelsToGain (raw (parameters, "input"));
@@ -467,7 +479,7 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Sample-accurate, host-tempo-aware movement. Read host tempo once per block.
     const bool freeMotion = raw (parameters, "motionFree") > 0.5f;
     double hostBpm = 120.0;
-    if (! freeMotion)
+    if (! freeMotion || (matrixOn && matrixSettings.tempoSync))
         if (auto* playHead = getPlayHead())
             if (const auto position = playHead->getPosition())
                 if (const auto bpm = position->getBpm())
@@ -485,6 +497,37 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     for (int i = 0; i < n; ++i)
     {
+        if (matrixOn && (i % 128 == 0))
+        {
+            // 128-frame control cadence: fully bounded, with an additional
+            // 12 ms smoothing per route and JUCE output smoothing. No
+            // allocation, locks or APVTS/ValueTree edits in this path.
+            const auto offsets = modMatrix.processSegment (
+                matrixSettings,left,right,i,std::min(128,n-i),channels,
+                static_cast<float>(hostBpm),dnaFeatures,matrixMacros);
+            auto modA=a, modB=b;
+            matrixFusion=fusion; matrixBalance=balance;
+            float modWet=raw(parameters,"drywet");
+            float modWidth=raw(parameters,"width");
+            offsets.apply(modA,modB,matrixFusion,matrixBalance,modWet,modWidth);
+            engineA.configure(aMaterial,modA);
+            if(activeB) engineB.configure(bMaterial,modB);
+            wetSmooth.setTargetValue(modWet);
+            widthSmooth.setTargetValue(modWidth);
+            if(renderMorph)
+            {
+                const auto phase=trajectoryReverse?1.0f-trajectoryPhase:trajectoryPhase;
+                const auto p=organix::TrajectoryDesigner::sample(
+                    trajectoryShape,phase,audioTrajectory);
+                const auto xy=trajectoryPlaying?
+                    organix::TrajectoryDesigner::blend (
+                        {morphXSmooth.getCurrentValue(),morphYSmooth.getCurrentValue()},
+                        p,trajectoryDepth)
+                    :organix::TrajectoryPoint{
+                        morphXSmooth.getCurrentValue(),morphYSmooth.getCurrentValue()};
+                morphRender.configure(xy.x,xy.y,dnaFeatures,morphDNA,reactions,&offsets);
+            }
+        }
         const float modulation = organix::Movement::wave (trajectory, movementPhase, movementHeld);
         const float wet = organix::Movement::scaleWet (
             wetSmooth.getNextValue(), movementAmount, modulation);
@@ -537,7 +580,7 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     y = engineA.process (ch, x);
                 else
                     y = reactionLink.process (engineA, engineB,
-                        aMaterial, bMaterial, routing, balance, fusion,
+                        aMaterial, bMaterial, routing, matrixBalance, matrixFusion,
                         ch, x, reactions);
             }
             originals[ch] = original;
@@ -589,6 +632,15 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                              (renderMorph ? morphRender.reactionMeterBA() : 0.0f) * standardWeight;
     reactionActivityAB.store (reactions.enabled ? activityAB : 0.0f, std::memory_order_relaxed);
     reactionActivityBA.store (reactions.enabled ? activityBA : 0.0f, std::memory_order_relaxed);
+    if(matrixOn)
+    {
+        const auto& report=modMatrix.getLatest().activity;
+        for(size_t k=0;k<report.size();++k)
+            matrixSlotActivity[k].store(report[k],std::memory_order_relaxed);
+    }
+    else
+        for(auto& meterValue:matrixSlotActivity)
+            meterValue.store(0.0f,std::memory_order_relaxed);
     const double divisor = static_cast<double> (channels) * n;
     inputRms.store (static_cast<float> (std::sqrt (inputSquare / divisor)), std::memory_order_relaxed);
     outputRms.store (static_cast<float> (std::sqrt (outputSquare / divisor)), std::memory_order_relaxed);
