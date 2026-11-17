@@ -30,6 +30,9 @@ UI_FILES = [
     "OrganixReactionPanel.h",
     "OrganixModMatrixView.cpp",
     "OrganixModMatrixView.h",
+    "OrganixPresetLabCore.h",
+    "OrganixPresetLabView.cpp",
+    "OrganixPresetLabView.h",
     "OrganixSpectralView.cpp",
     "OrganixSpectralView.h",
 ]
