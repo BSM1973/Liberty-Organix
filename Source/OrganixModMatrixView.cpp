@@ -110,6 +110,11 @@ OrganixModMatrixView::OrganixModMatrixView (OrganixAudioProcessor& p):audio(p)
     closeButton.onClick=[this] { if(onClose) onClose(); };
     demoButton.onClick=[this] { applyDemo(); };
     depthLink=nullptr;
+    masterToggle.setComponentID ("midi:matrixEnable");
+    tempoToggle.setComponentID ("midi:matrixTempoSync");
+    masterDepth.setComponentID ("midi:matrixMasterDepth");
+    randomRate.setComponentID ("midi:matrixRandomRate");
+    division.setComponentID ("midi:matrixBeatDivision");
     masterLink=std::make_unique<SliderAttachment>(
         audio.parameters,"matrixMasterDepth",masterDepth);
     randomLink=std::make_unique<SliderAttachment>(
@@ -119,12 +124,15 @@ OrganixModMatrixView::OrganixModMatrixView (OrganixAudioProcessor& p):audio(p)
     for(int i=0;i<4;++i)
     {
         const auto name=juce::String("matrixLfo")+juce::String(i+1)+"Rate";
+        lfoRates[static_cast<size_t>(i)].setComponentID ("midi:" + name);
         lfoLinks[static_cast<size_t>(i)]=std::make_unique<SliderAttachment>(
             audio.parameters,name,lfoRates[static_cast<size_t>(i)]);
     }
     for(int i=0;i<2;++i)
     {
         const auto stem=juce::String("matrixEnv")+juce::String(i+1);
+        envelopeSliders[static_cast<size_t>(i*2)].setComponentID ("midi:" + stem + "Attack");
+        envelopeSliders[static_cast<size_t>(i*2+1)].setComponentID ("midi:" + stem + "Decay");
         envLinks[static_cast<size_t>(i*2)]=std::make_unique<SliderAttachment>(
             audio.parameters,stem+"Attack",envelopeSliders[static_cast<size_t>(i*2)]);
         envLinks[static_cast<size_t>(i*2+1)]=std::make_unique<SliderAttachment>(
@@ -167,6 +175,11 @@ void OrganixModMatrixView::bindSlot(int index)
     targetLink.reset();
     polarityLink.reset();
     const auto stem=slotStem(selected);
+    slotToggle.setComponentID ("midi:" + stem + "Enable");
+    source.setComponentID ("midi:" + stem + "Source");
+    target.setComponentID ("midi:" + stem + "Target");
+    polarity.setComponentID ("midi:" + stem + "Polarity");
+    slotDepth.setComponentID ("midi:" + stem + "Depth");
     sourceLink=std::make_unique<ComboAttachment>(audio.parameters,stem+"Source",source);
     targetLink=std::make_unique<ComboAttachment>(audio.parameters,stem+"Target",target);
     polarityLink=std::make_unique<ComboAttachment>(audio.parameters,stem+"Polarity",polarity);
