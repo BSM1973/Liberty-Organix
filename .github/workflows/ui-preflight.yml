@@ -30,6 +30,31 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate UI UTF-8 and missing-glyph policy
         run: python3 tools/check_ui_text.py
+      - name: Vérifier la procédure de notarisation sans secrets Apple
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in tools/macos_notarization_preflight.sh tools/macos_sign_notarize.sh tools/macos_stage_plugins.sh tools/macos_pkg_qa.sh; do
+            bash -n "$script"
+          done
+          if env -u APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 -u APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 -u APPLE_P12_PASSWORD -u APPLE_NOTARY_APPLE_ID -u APPLE_NOTARY_APP_PASSWORD -u APPLE_NOTARY_TEAM_ID bash tools/macos_notarization_preflight.sh >/tmp/organix-negative-preflight.log 2>&1; then
+            echo "ERROR: missing Apple secrets did not block notarization"
+            exit 1
+          fi
+          grep -q 'Missing\|manquant' /tmp/organix-negative-preflight.log
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path(".github/workflows/commercial-release.yml").read_text(encoding="utf-8")
+          a=s.index("run: bash tools/macos_notarization_preflight.sh")
+          b=s.index("run: bash tools/macos_sign_notarize.sh")
+          assert a<b
+          assert "workflow_dispatch:" in s
+          assert "refs/heads/main" in s
+          assert "refs/heads/release/organix-notarization-one-click" in s
+          assert "steps.published.outputs.artifact-id" in s
+          assert "SIGNED-NOTARIZED.pkg" in s
+          print("PASS: one-click notarization workflow guards and shell syntax")
+          PY
       - name: Configure pure C++ tests, no JUCE download needed
         run: cmake -S . -B build-test -DORGANIX_BUILD_PLUGIN=OFF -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
       - name: Compile smoke, preset, material and UI geometry tests

@@ -1,4 +1,5 @@
-name: ORGANIX COMMERCIAL RELEASE — APPLE SIGNED + NOTARIZED
+name: ORGANIX — NOTARISATION APPLE (1 CLIC)
+run-name: Signature et notarisation Organix depuis ${{ github.ref_name }}
 
 # Credentials only available during manual dispatch from main, never PR CI.
 on:
@@ -13,15 +14,25 @@ concurrency:
 
 jobs:
   signed-macos-pkg:
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/organix-notarization-one-click')
     name: Build, validate, sign, notarize, install AU/VST3
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - name: Checkout trusted main source
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Vérifier les 6 secrets Apple AVANT compilation
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          APPLE_P12_PASSWORD: ${{ secrets.APPLE_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: bash tools/macos_notarization_preflight.sh
       - name: Validate ARM64 build and read version
         id: version
         shell: bash
@@ -84,6 +95,22 @@ jobs:
           /usr/bin/xcrun stapler validate "$pkg"
           /usr/sbin/spctl --assess --type install --verbose=2 "$pkg"
           /usr/bin/shasum -a 256 "$pkg"
+      - name: Résultat commercial et lien de téléchargement
+        if: success()
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+          ARTIFACT_ID: ${{ steps.published.outputs.artifact-id }}
+        run: |
+          {
+            echo "## ORGANIX v${VERSION} — SIGNÉ ET NOTARISÉ PAR APPLE"
+            echo "Apple Notary Service : **Accepted** ; ticket staplé ; Gatekeeper validé."
+            echo "Les composants AU/VST3 ont été installés et leurs signatures revérifiées."
+            echo ""
+            echo "[Télécharger le PKG commercial](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts/${ARTIFACT_ID})"
+            echo ""
+            echo "Ce PKG est le seul artefact destiné aux clients."
+          } >> "${GITHUB_STEP_SUMMARY}"
       - name: Publish validation logs
         if: always()
         uses: actions/upload-artifact@v4
