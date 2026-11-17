@@ -84,10 +84,15 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 0
-      - name: RELEASE GATE 2 — Download published artifact and verify AU/VST3
+      - name: RELEASE GATE 2 — Download the actual published Artifact via GitHub Actions
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.published.outputs.artifact-id }}
+          path: verified-download
+      - name: RELEASE GATE 3 — Verify downloaded Artifact includes working AU and VST3 ZIPs
         env:
-          GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ steps.published.outputs.artifact-id }}
           EXPECTED_ARTIFACT_NAME: Organix-v${{ steps.version.outputs.number }}-macOS-arm64-AU-VST3
+          DOWNLOADED_ARTIFACT_DIR: verified-download
         run: python3 tools/verify_downloadable_artifact.py published
 
