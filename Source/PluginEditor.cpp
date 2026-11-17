@@ -460,6 +460,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
     dial.slider.setTooltip (ui::dialTooltip (french, label));
+    if (id.isNotEmpty()) dial.slider.setComponentID ("midi:" + id);
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
@@ -553,6 +554,7 @@ void OrganixAudioProcessorEditor::bindProperties()
         const auto parameterId = juce::String (selectedLayer == 0 ? "aShape" : "bShape") + suffix;
         dial.label.setText (ui::property (id, i, french), juce::dontSendNotification);
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
+        dial.slider.setComponentID ("midi:" + parameterId);
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
         if (auto* param = audio.parameters.getParameter (parameterId))
@@ -570,6 +572,9 @@ void OrganixAudioProcessorEditor::updateMaterialState()
     const int a = activeMaterial (0), b = activeMaterial (1);
     const int selected = activeMaterial (selectedLayer);
     const bool enabled = vParam (audio, "enableB") > 0.5f;
+    for (int i = 0; i < 6; ++i)
+        materialButtons[static_cast<size_t> (i)].setComponentID (
+            selectedLayer == 0 ? "midi:materialA" : "midi:materialB");
     for (int i = 0; i < 6; ++i)
         materialButtons[static_cast<size_t> (i)].setLayerState (
             i == selected, i == a, enabled && i == b);
@@ -694,6 +699,9 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     populateMovementChoices();
     refreshMovementState();
     browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
+    midiLearnButton.setTooltip (ui::word (french,
+        "MIDI Learn : cliquez puis choisissez une commande, ou clic droit sur un réglage",
+        "MIDI Learn: click to select a control, or right-click any mapped control"));
     macroToggle.setButtonText (macroPage ? ui::word (french, "PRINCIPAL", "MAIN")
                                        : juce::String ("MACROS"));
     dnaToggle.setButtonText (dnaPage ? ui::word (french, "PRINCIPAL", "MAIN")
@@ -851,6 +859,11 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     languageEN.onClick = [this] { changeLanguage (false); };
     languageFR.setTooltip (juce::String::fromUTF8 ("Français"));
     languageEN.setTooltip ("English");
+    midiLearnButton.setTooltip ("MIDI Learn : cliquer pour choisir une commande, ou clic droit sur un potentiomètre");
+    midiLearnButton.setColour (juce::TextButton::buttonColourId, ui::surface);
+    midiLearnButton.setColour (juce::TextButton::textColourOffId, ui::accentFor (0));
+    midiLearnButton.onClick = [this] { showMidiTargetMenu(); };
+    addAndMakeVisible (midiLearnButton);
     addAndMakeVisible (languageFR);
     addAndMakeVisible (languageEN);
 
@@ -878,6 +891,13 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
         refreshMovementState();
     };
     addAndMakeVisible (motionFreeButton);
+    engaged.setComponentID ("midi:bypass");
+    enableB.setComponentID ("midi:enableB");
+    motionFreeButton.setComponentID ("midi:motionFree");
+    trajectorySelect.setComponentID ("midi:motionTrajectory");
+    divisionSelect.setComponentID ("midi:motionDivision");
+    routeSelector.setComponentID ("midi:routing");
+    visualizer.setComponentID ("");
     populateMovementChoices();
 
     addAndMakeVisible (routeSelector);
@@ -1009,11 +1029,15 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     // The host-facing editor owns window size. This component is its
     // logical content and may be uniformly scaled for a small display.
     setSize (1240, 820);
+    // Capture popup requests from all descendant controls; never steal left clicks.
+    addMouseListener (this, true);
+    refreshMidiLearnStatus();
     startTimerHz (12);
 }
 OrganixAudioProcessorEditor::~OrganixAudioProcessorEditor()
 {
     stopTimer();
+    removeMouseListener (this);
     for (auto& dial : properties) dial.attachment.reset();
     for (auto& dial : macros) dial.attachment.reset();
     for (auto& dial : bottom) dial.attachment.reset();
@@ -1190,6 +1214,7 @@ void OrganixAudioProcessorEditor::resized()
     // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
     auto controlsRect = headActions.removeFromRight (
         juce::jmin (485, juce::jmax (310, headActions.getWidth() - 370)));
+    midiLearnButton.setBounds (controlsRect.removeFromRight (76).reduced (3, 25));
     browserButton.setBounds (controlsRect.removeFromRight (111).reduced (3, 25));
     next.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
     previous.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
@@ -1334,8 +1359,118 @@ void OrganixAudioProcessorEditor::resized()
     if(matrixPage)
         matrixView.toFront(false);
 }
+
+void OrganixAudioProcessorEditor::mouseDown (const juce::MouseEvent& event)
+{
+    if (! event.mods.isPopupMenu()) return;
+    auto* source = event.originalComponent;
+    while (source != nullptr && source != this)
+    {
+        const auto id = source->getComponentID();
+        if (id.startsWith ("midi:"))
+        {
+            showMidiContextMenu (id.fromFirstOccurrenceOf ("midi:", false, false), *source);
+            return;
+        }
+        source = source->getParentComponent();
+    }
+}
+void OrganixAudioProcessorEditor::showMidiContextMenu (
+    const juce::String& parameterId, juce::Component& target)
+{
+    if (audio.parameters.getParameter (parameterId) == nullptr) return;
+    juce::PopupMenu menu;
+    const auto mapping = audio.midiLearnMapping (parameterId);
+    if (auto* param = audio.parameters.getParameter (parameterId))
+        menu.addSectionHeader (param->getName (64));
+    if (mapping.isNotEmpty())
+        menu.addSectionHeader ("MIDI : " + mapping);
+    menu.addItem (1, ui::word (french, "Apprendre un CC MIDI", "Learn MIDI CC"));
+    menu.addItem (2, ui::word (french, "Oublier cette affectation", "Forget this assignment"),
+                  mapping.isNotEmpty());
+    menu.addItem (3, ui::word (french, "Annuler l'apprentissage", "Cancel MIDI Learn"),
+                  audio.isMidiLearning());
+    juce::Component::SafePointer<OrganixAudioProcessorEditor> safe (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&target),
+        [safe, parameterId] (int result)
+        {
+            if (safe == nullptr) return;
+            if (result == 1) safe->audio.startMidiLearn (parameterId);
+            if (result == 2) safe->audio.clearMidiLearn (parameterId);
+            if (result == 3) safe->audio.cancelMidiLearn();
+            safe->refreshMidiLearnStatus();
+        });
+}
+void OrganixAudioProcessorEditor::showMidiTargetMenu()
+{
+    // All exposed APVTS parameters remain assignable even if their panels
+    // are currently hidden (DNA, Morph, Trajectory, Reactions and Matrix).
+    juce::PopupMenu a, b, matrix, other;
+    const auto& parameters = audio.getParameters();
+    for (int i = 0; i < parameters.size(); ++i)
+    {
+        const auto* parameter =
+            dynamic_cast<juce::AudioProcessorParameterWithID*> (parameters[i]);
+        if (parameter == nullptr) continue;
+        const auto id = parameter->getParameterID();
+        juce::PopupMenu* section = &other;
+        if (id.startsWith ("mm") || id.startsWith ("matrix")) section = &matrix;
+        else if (id.startsWith ("aShape") || id.startsWith ("aAmount") ||
+                 id.startsWith ("aMotion") || id.startsWith ("aTone") ||
+                 id.startsWith ("aFeedback") || id == "materialA") section = &a;
+        else if (id.startsWith ("bShape") || id.startsWith ("bAmount") ||
+                 id.startsWith ("bMotion") || id.startsWith ("bTone") ||
+                 id.startsWith ("bFeedback") || id == "materialB") section = &b;
+        section->addItem (1000 + i, parameter->getName (72));
+    }
+    juce::PopupMenu menu;
+    menu.addSectionHeader (ui::word (french, "MIDI LEARN / CC 1-119",
+                                              "MIDI LEARN / CC 1-119"));
+    menu.addSubMenu (ui::word (french, "Matériau A", "Material A"), a);
+    menu.addSubMenu (ui::word (french, "Matériau B", "Material B"), b);
+    menu.addSubMenu (ui::word (french, "Matrice", "Mod Matrix"), matrix);
+    menu.addSubMenu (ui::word (french, "Autres paramètres", "Other parameters"), other);
+    menu.addSeparator();
+    menu.addItem (1, ui::word (french, "Annuler l'apprentissage", "Cancel learning"),
+                  audio.isMidiLearning());
+    menu.addItem (2, ui::word (french, "Effacer tous les CC appris", "Clear all learned CCs"));
+    juce::Component::SafePointer<OrganixAudioProcessorEditor> safe (this);
+    menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&midiLearnButton),
+        [safe] (int choice)
+        {
+            if (safe == nullptr) return;
+            if (choice == 1) safe->audio.cancelMidiLearn();
+            else if (choice == 2) safe->audio.clearAllMidiLearn();
+            else if (choice >= 1000)
+            {
+                const int parameterIndex = choice - 1000;
+                const auto& params = safe->audio.getParameters();
+                if (parameterIndex < params.size())
+                    if (const auto* param =
+                        dynamic_cast<juce::AudioProcessorParameterWithID*> (
+                            params[parameterIndex]))
+                        safe->audio.startMidiLearn (param->getParameterID());
+            }
+            safe->refreshMidiLearnStatus();
+        });
+}
+void OrganixAudioProcessorEditor::refreshMidiLearnStatus()
+{
+    const auto target = audio.midiLearnTargetName();
+    const bool learning = target.isNotEmpty();
+    midiLearnButton.setButtonText (learning ? "CC..." : "MIDI");
+    midiLearnButton.setColour (juce::TextButton::buttonColourId,
+        learning ? juce::Colour (0xff284f40) : ui::surface);
+    midiLearnButton.setTooltip (learning
+        ? ui::word (french, "Bougez un contrôleur CC MIDI pour apprendre : ",
+                           "Move a MIDI CC control to learn: ") + target
+        : ui::word (french, "MIDI Learn : clic droit sur un réglage ou clic ici pour choisir",
+                           "MIDI Learn: right-click a control or click here to select"));
+}
+
 void OrganixAudioProcessorEditor::timerCallback()
 {
+    refreshMidiLearnStatus();
     refreshPreset();
     routeSelector.refresh();
     refreshMovementState();
