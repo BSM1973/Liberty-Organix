@@ -120,6 +120,17 @@ jobs:
           path: validation-logs/
           if-no-files-found: warn
           retention-days: 90
+      - name: Verify clean AU/VST3 installation with an unsigned QA-only pkg
+        shell: bash
+        run: bash tools/macos_pkg_qa.sh "${{ steps.version.outputs.number }}"
+      - name: Publish installer layout and clean install test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-v${{ steps.version.outputs.number }}-macOS-Installer-QA-Logs
+          path: installer-qa/*.txt
+          if-no-files-found: warn
+          retention-days: 90
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
