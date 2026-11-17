@@ -113,13 +113,27 @@ struct Render
     std::vector<float> output;
 };
 Render process (int program, int seconds, const char* disabledTechnology,
-                bool saveSamples)
+                bool saveSamples, bool probeMorph = false)
 {
     const auto& design=organix::factoryPresets[static_cast<size_t>(program)];
     auto plugin=std::make_unique<OrganixAudioProcessor>();
     plugin->setPlayConfigDetails(2,2,sampleRate,blockSize);
     plugin->prepareToPlay(sampleRate,blockSize);
     plugin->loadFactoryPreset(program);
+    if(probeMorph)
+    {
+        // Scene A is often identical to the base preset. Test a real
+        // nonzero XY blend with trajectory disabled in BOTH arms.
+        const auto setValue = [&] (const char* id,float value)
+        {
+            if(auto* param=plugin->parameters.getParameter(id))
+                param->setValueNotifyingHost(param->convertTo0to1(value));
+        };
+        setValue("trajectoryEnable",0.0f);
+        setValue("morphEnable",1.0f);
+        setValue("morphX",0.78f);
+        setValue("morphY",0.67f);
+    }
     if(disabledTechnology!=nullptr)
     {
         if(auto* param=plugin->parameters.getParameter(disabledTechnology))
@@ -235,14 +249,17 @@ int main(int argc,char** argv)
             if((design.technologies&featureFlags[feature])==0)continue;
             // Compare outputs with the named technology disabled, using
             // the SAME input signal and completely reset DSP/transport.
-            const auto off=process(i,1,switchIds[feature],true);
-            if(!off.finite){++nonfinite;continue;}
-            offDelta[feature]=asDb(on.rms)-asDb(off.rms);
+            const bool isMorphProbe = featureFlags[feature] == organix::M;
+            const auto reference = isMorphProbe
+                ? process(i,1,nullptr,true,true) : on;
+            const auto off=process(i,1,switchIds[feature],true,isMorphProbe);
+            if(!reference.finite||!off.finite){++nonfinite;continue;}
+            offDelta[feature]=asDb(reference.rms)-asDb(off.rms);
             double squaredDifference=0.0;
-            const auto total=std::min(on.output.size(),off.output.size());
+            const auto total=std::min(reference.output.size(),off.output.size());
             for(size_t frame=0;frame<total;++frame)
             {
-                const double change=on.output[frame]-off.output[frame];
+                const double change=reference.output[frame]-off.output[frame];
                 squaredDifference+=change*change;
             }
             audibleDifference[feature]=asDb(std::sqrt(
