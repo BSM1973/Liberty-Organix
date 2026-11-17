@@ -52,6 +52,7 @@ OrganixMatterDNAView::OrganixMatterDNAView (OrganixAudioProcessor& processor)
         addAndMakeVisible (c.knob);
         addAndMakeVisible (c.name);
         addAndMakeVisible (c.value);
+        c.knob.setComponentID (juce::String ("midi:") + ids[i]);
         c.link = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
             audio.parameters, ids[i], c.knob);
         c.knob.onValueChange();
@@ -68,6 +69,7 @@ OrganixMatterDNAView::OrganixMatterDNAView (OrganixAudioProcessor& processor)
         refreshEnableState();
     };
     addAndMakeVisible (enableButton);
+    enableButton.setComponentID ("midi:dnaEnable");
     setFrench (true);
     startTimerHz (30);
 }
