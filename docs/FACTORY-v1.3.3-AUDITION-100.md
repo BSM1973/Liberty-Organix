@@ -78,3 +78,24 @@ humaine réellement effectuée. Les WAV du banc JUCE peuvent servir à
 préparer la séance mais ne reproduisent pas toutes les particularités de
 l'hôte ni le ressenti d'une production musicale. Ne pas remplacer un
 jugement de sound design par une égalisation aveugle à -18 dBFS.
+
+
+## Résultats de la première passe sur le moteur JUCE complet
+
+Le premier Artifact de la PR #17 a rendu 100 sorties stéréo par
+`OrganixAudioProcessor::processBlock`. Aucun programme ne fut silencieux.
+Les 16 cas prioritaires ont montré un gain relatif à la source allant
+d'environ -1,6 dB à -9,3 dB : **écart d'amplitude, pas de qualité sonore**.
+
+L'audit comparait initialement Morph 4D uniquement à la scène A. Or
+celle-ci peut être volontairement identique au son de base. Le protocole
+v1.3.3 teste désormais une position XY non nulle, avec Trajectory
+désactivé dans les deux bras, avant d'évaluer la différence de Morphing.
+
+Deux affectations factory de Mod Matrix n'avaient pas d'effet dans
+leur contexte : `Metallic Strings` visait la densité du moteur Metal,
+et `Metallic Oscillations` visait son timbre. Les routes principales
+ont été remplacées, respectivement par Transitoires -> Énergie A et
+LFO 1 -> Énergie A, sans toucher aux autres noms et catégories.
+Ces corrections doivent être vérifiées par le nouvel audit et à
+l'écoute réelle avant un statut de sound design final.
