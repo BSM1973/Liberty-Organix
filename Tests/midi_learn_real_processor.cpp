@@ -1,5 +1,6 @@
 // Integration validation of real Organix MIDI CC Learn with JUCE APVTS.
 #include "../Source/PluginProcessor.h"
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -49,6 +50,22 @@ int main()
     if(!approx(normalized(*processor,"drywet"),100.0f/127.0f))
         return fail(6,"Learned CC did not reach real APVTS parameter");
     const float saved=normalized(*processor,"drywet");
+    // A long SysEx may require heap storage in juce::MidiMessage.
+    // MIDI Learn must ignore it using raw MidiBuffer metadata only.
+    {
+        std::array<juce::uint8,192> payload {};
+        for(size_t i=0;i<payload.size();++i)
+            payload[i]=static_cast<juce::uint8>(i%128);
+        juce::MidiBuffer sysex;
+        sysex.addEvent(juce::MidiMessage::createSysExMessage(
+                           payload.data(),static_cast<int>(payload.size())),0);
+        juce::AudioBuffer<float> empty(2,128);
+        empty.clear();
+        processor->processBlock(empty,sysex);
+        processor->flushMidiLearnUpdates();
+        if(sysex.getNumEvents()!=1||!approx(normalized(*processor,"drywet"),saved,1.0e-5f))
+            return fail(20,"Long SysEx should be forwarded untouched and not change CC mapping");
+    }
     if(!renderCC(*processor,1,74,4))return fail(7,"MIDI event altered");
     if(!approx(normalized(*processor,"drywet"),saved,1.0e-5f))
         return fail(8,"Wrong MIDI channel was accepted");
