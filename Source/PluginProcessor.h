@@ -8,6 +8,7 @@
 #include "OrganixMorph4D.h"
 #include "OrganixTrajectory.h"
 #include "MaterialReactions.h"
+#include "OrganixModMatrix.h"
 #include <array>
 #include <cstdint>
 #include <atomic>
@@ -50,6 +51,7 @@ public:
     std::atomic<float> outputPeak {0.0f};
     // Values from the audio engine, observed by the reaction panel only.
     std::atomic<float> reactionActivityAB {0.0f}, reactionActivityBA {0.0f};
+    std::array<std::atomic<float>,organix::MatrixSettings::slotCount> matrixSlotActivity {};
     // Read-only UI meters; audio callback is the sole writer.
     std::atomic<float> dnaEnergy {0.0f}, dnaTransient {0.0f};
     std::atomic<float> dnaAir {0.0f}, dnaMotion {0.0f};
@@ -64,6 +66,18 @@ private:
     organix::MaterialReactionLink reactionLink;
     organix::MatterDNA matterDNA;
     organix::MorphRender morphRender;
+    organix::ModulationMatrix modMatrix;
+    struct MatrixSlotPointers
+    {
+        std::atomic<float>* enabled=nullptr;
+        std::atomic<float>* source=nullptr;
+        std::atomic<float>* target=nullptr;
+        std::atomic<float>* depth=nullptr;
+        std::atomic<float>* bipolar=nullptr;
+    };
+    std::array<MatrixSlotPointers,organix::MatrixSettings::slotCount> matrixParams {};
+    void initialiseMatrixParameterPointers();
+    organix::MatrixSettings readMatrixSettings() const noexcept;
     juce::LinearSmoothedValue<float> morphBlendSmooth, morphXSmooth, morphYSmooth;
     struct SceneMailbox
     {

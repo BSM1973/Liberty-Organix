@@ -187,7 +187,8 @@ void MorphRender::setScene (int scene, MorphScene next) noexcept
 void MorphRender::configureOne (Pair& pair, const MorphScene& scene,
                                 const MorphScene& continuous,
                                 MatterDNA::Features features,
-                                MatterDNAControls controls) noexcept
+                                MatterDNAControls controls,
+                                const MatrixOffsets* modulation) noexcept
 {
     auto a = continuous.a;
     auto b = continuous.b;
@@ -197,6 +198,8 @@ void MorphRender::configureOne (Pair& pair, const MorphScene& scene,
         if (scene.enableB)
             applyMatterDNA (static_cast<Material> (scene.materialB), b, features, controls);
     }
+    if (modulation != nullptr)
+        modulation->apply (a, b);
     pair.a.configure (static_cast<Material> (scene.materialA), a);
     if (scene.enableB)
         pair.b.configure (static_cast<Material> (scene.materialB), b);
@@ -205,28 +208,38 @@ void MorphRender::configureOne (Pair& pair, const MorphScene& scene,
 void MorphRender::configure (float x, float y,
                              MatterDNA::Features features,
                              MatterDNAControls controls,
-                             ReactionControls reactions) noexcept
+                             ReactionControls reactions,
+                             const MatrixOffsets* modulation) noexcept
 {
     reactionSettings = reactions;
+    matrixOffsets = modulation != nullptr ? *modulation : MatrixOffsets {};
     blockWeights = Morph4D::weights (x, y);
     continuousBlend = Morph4D::interpolate (target, blockWeights);
+    continuousBlend.fusion = std::clamp (
+        continuousBlend.fusion + matrixOffsets.destinations[37],0.0f,1.0f);
+    continuousBlend.balance = std::clamp (
+        continuousBlend.balance + matrixOffsets.destinations[38],0.0f,1.0f);
     for (int i = 0; i < 4; ++i)
     {
         const auto index = static_cast<size_t> (i);
         const int bank = currentBank[index];
         if (! transitioning[index])
             configureOne (engines[index][static_cast<size_t> (bank)],
-                          target[index], continuousBlend, features, controls);
+                          target[index], continuousBlend, features, controls, modulation);
         else
         {
             auto oldSceneSet = target;
             oldSceneSet[index] = previous[index];
             const auto oldBlend = Morph4D::interpolate (oldSceneSet, blockWeights);
             previousContinuous[index] = oldBlend;
+            previousContinuous[index].fusion = std::clamp (
+                oldBlend.fusion + matrixOffsets.destinations[37],0.0f,1.0f);
+            previousContinuous[index].balance = std::clamp (
+                oldBlend.balance + matrixOffsets.destinations[38],0.0f,1.0f);
             configureOne (engines[index][static_cast<size_t> (bank)],
-                          previous[index], oldBlend, features, controls);
+                          previous[index], previousContinuous[index], features, controls, modulation);
             configureOne (engines[index][static_cast<size_t> (1 - bank)],
-                          target[index], continuousBlend, features, controls);
+                          target[index], continuousBlend, features, controls, modulation);
         }
     }
 }
@@ -289,14 +302,14 @@ float MorphRender::wetAt (const std::array<float,4>& weights) const noexcept
     float value = 0.0f;
     for (int i = 0; i < 4; ++i)
         value += weights[static_cast<size_t> (i)] * target[static_cast<size_t> (i)].wet;
-    return std::clamp (value, 0.0f, 1.0f);
+    return std::clamp (value + matrixOffsets.destinations[39], 0.0f, 1.0f);
 }
 float MorphRender::widthAt (const std::array<float,4>& weights) const noexcept
 {
     float value = 0.0f;
     for (int i = 0; i < 4; ++i)
         value += weights[static_cast<size_t> (i)] * target[static_cast<size_t> (i)].width;
-    return std::clamp (value, 0.0f, 2.0f);
+    return std::clamp (value + matrixOffsets.destinations[40]*2.0f, 0.0f, 2.0f);
 }
 float MorphRender::reactionMeterAB() const noexcept
 {
