@@ -26,7 +26,7 @@ void configure (juce::TextEditor& editor)
 }
 
 OrganixPresetBrowser::OrganixPresetBrowser (OrganixAudioProcessor& p, juce::PropertiesFile& prefs)
-    : audio (p), settings (prefs), list ("ORGANIX_PRESET_LIBRARY", this)
+    : audio (p), settings (prefs), lab(p), list ("ORGANIX_PRESET_LIBRARY", this)
 {
     favoriteKeys = juce::StringArray::fromTokens (settings.getValue ("favorites"), "|", "");
     favoriteKeys.removeEmptyStrings();
@@ -42,14 +42,14 @@ OrganixPresetBrowser::OrganixPresetBrowser (OrganixAudioProcessor& p, juce::Prop
     configure (saveName);
     saveName.setReturnKeyStartsNewLine (false);
 
-    for (auto* c : { &category, &material, &origin })
+    for (auto* c : { &category, &material, &origin, &character })
     {
         configure (*c);
         addAndMakeVisible (*c);
         c->onChange = [this] { rebuildResults(); };
     }
     for (auto* b : { &favoriteOnlyButton, &favoriteButton, &loadButton, &saveButton,
-                      &importButton, &exportButton, &closeButton })
+                      &importButton, &exportButton, &closeButton, &labButton })
     {
         configure (*b);
         addAndMakeVisible (*b);
@@ -67,6 +67,8 @@ OrganixPresetBrowser::OrganixPresetBrowser (OrganixAudioProcessor& p, juce::Prop
     importButton.onClick = [this] { importPreset(); };
     exportButton.onClick = [this] { exportSelected(); };
     closeButton.onClick = [this] { if (onDismissed) onDismissed(); };
+    labButton.onClick = [this] { setLabOpen(true); };
+    lab.onClose = [this] { setLabOpen(false); };
     for (auto* l : { &countLabel, &messageLabel })
     {
         l->setColour (juce::Label::textColourId, ui::secondary);
@@ -76,6 +78,8 @@ OrganixPresetBrowser::OrganixPresetBrowser (OrganixAudioProcessor& p, juce::Prop
     addAndMakeVisible (search);
     addAndMakeVisible (saveName);
     addAndMakeVisible (list);
+    addAndMakeVisible (lab);
+    lab.setVisible(false);
     setFrench (true);
 }
 OrganixPresetBrowser::~OrganixPresetBrowser()
@@ -89,6 +93,7 @@ void OrganixPresetBrowser::setFrench (bool value)
     const auto rememberedCategory = category.getSelectedId();
     const auto rememberedMaterial = material.getSelectedId();
     const auto rememberedOrigin = origin.getSelectedId();
+    const auto rememberedCharacter=character.getSelectedId();
     category.clear (juce::dontSendNotification);
     for (int i = 0; i <= 10; ++i)
         category.addItem (ui::category (i, french), i + 1);
@@ -103,6 +108,13 @@ void OrganixPresetBrowser::setFrench (bool value)
     origin.addItem (ui::word (french, "Presets d'usine", "Factory presets"), 2);
     origin.addItem (ui::word (french, "Mes presets", "My presets"), 3);
     origin.setSelectedId (rememberedOrigin > 0 ? rememberedOrigin : 1, juce::dontSendNotification);
+    character.clear(juce::dontSendNotification);
+    for(int i=0;i<=11;++i)
+        character.addItem(juce::String::fromUTF8(organix::characterLabel(
+            static_cast<organix::PresetCharacter>(i),french)),i+1);
+    character.setSelectedId(rememberedCharacter>0?rememberedCharacter:1,
+                             juce::dontSendNotification);
+    lab.setFrench(french);
     search.setTextToShowWhenEmpty (ui::word (french, "Rechercher un nom, un style, un matériau...",
                                                       "Search name, category or material..."), ui::subdued);
     saveName.setTextToShowWhenEmpty (ui::word (french, "Nom de mon preset...", "My preset name..."), ui::subdued);
@@ -113,6 +125,7 @@ void OrganixPresetBrowser::setFrench (bool value)
     importButton.setButtonText (ui::word (french, "IMPORTER", "IMPORT"));
     exportButton.setButtonText (ui::word (french, "EXPORTER", "EXPORT"));
     closeButton.setButtonText (ui::word (french, "FERMER  X", "CLOSE  X"));
+    labButton.setButtonText("PRESET LAB");
     refreshLibrary();
 }
 void OrganixPresetBrowser::refreshLibrary()
@@ -169,6 +182,7 @@ void OrganixPresetBrowser::rebuildResults (bool preserveSelection)
     const auto query = search.getText().trim();
     const int categoryId = category.getSelectedId() - 1; // 0: all, 1..10: category
     const int materialId = material.getSelectedId() - 2; // -1: all, 0..5: material
+    const int characterId=character.getSelectedId()-1;
     const int originId = origin.getSelectedId();         // 1: all, 2: factory, 3: user
     for (const auto& entry : library)
     {
@@ -177,14 +191,32 @@ void OrganixPresetBrowser::rebuildResults (bool preserveSelection)
         if (originId == 3 && ! entry.isUser()) continue;
         if (categoryId > 0 && entry.category != categoryId) continue;
         if (materialId >= 0 && entry.materialA != materialId && entry.materialB != materialId) continue;
+        if(characterId>0)
+        {
+            if(entry.isUser())continue; // user presets have no character metadata
+            const auto& factory=organix::factoryPresets[
+                static_cast<size_t>(entry.factoryIndex)];
+            if(!organix::matchesCharacter(factory,
+                static_cast<organix::PresetCharacter>(characterId)))continue;
+        }
         if (query.isNotEmpty())
         {
             const auto tags = ui::category (entry.category, french) + " " +
                               (entry.materialA >= 0 ? ui::materialLabel (entry.materialA, french) : juce::String()) + " " +
                               (entry.materialB >= 0 ? ui::materialLabel (entry.materialB, french) : juce::String());
+            juce::String soundTags;
+            if(!entry.isUser())
+                for(int ch=1;ch<=11;++ch)
+                    if(organix::matchesCharacter(
+                           organix::factoryPresets[static_cast<size_t>(entry.factoryIndex)],
+                           static_cast<organix::PresetCharacter>(ch)))
+                        soundTags+=" "+juce::String::fromUTF8(
+                            organix::characterLabel(
+                                static_cast<organix::PresetCharacter>(ch),french));
             if (! entry.name.containsIgnoreCase (query) &&
                 ! entry.description.containsIgnoreCase (query) &&
-                ! tags.containsIgnoreCase (query)) continue;
+                ! tags.containsIgnoreCase (query) &&
+                ! soundTags.containsIgnoreCase (query)) continue;
         }
         results.push_back (entry);
     }
@@ -293,6 +325,7 @@ void OrganixPresetBrowser::applySelection()
         audio.parameters.state.setProperty ("customPresetName", entry.name, nullptr);
     }
     else audio.loadFactoryPreset (entry.factoryIndex);
+    lab.syncExternalChange();
     if (onApplied) onApplied (entry.name);
 }
 void OrganixPresetBrowser::toggleFavorite()
@@ -399,6 +432,37 @@ void OrganixPresetBrowser::exportSelected()
             else safe->setMessage (ui::word (safe->french, "Export impossible.", "Export failed."));
         });
 }
+void OrganixPresetBrowser::setLabOpen(bool open)
+{
+    labOpen=open;
+    lab.setVisible(open);
+    labButton.setVisible(!open);
+    for(auto* component:{
+        static_cast<juce::Component*>(&search),
+        static_cast<juce::Component*>(&saveName),
+        static_cast<juce::Component*>(&category),
+        static_cast<juce::Component*>(&material),
+        static_cast<juce::Component*>(&origin),
+        static_cast<juce::Component*>(&character),
+        static_cast<juce::Component*>(&favoriteOnlyButton),
+        static_cast<juce::Component*>(&favoriteButton),
+        static_cast<juce::Component*>(&loadButton),
+        static_cast<juce::Component*>(&saveButton),
+        static_cast<juce::Component*>(&importButton),
+        static_cast<juce::Component*>(&exportButton),
+        static_cast<juce::Component*>(&closeButton),
+        static_cast<juce::Component*>(&list),
+        static_cast<juce::Component*>(&countLabel),
+        static_cast<juce::Component*>(&messageLabel)
+    }) component->setVisible(!open);
+    if(open)
+    {
+        lab.prepareOpen();
+        lab.toFront(false);
+    }
+    resized();
+    repaint();
+}
 void OrganixPresetBrowser::paint (juce::Graphics& g)
 {
     g.fillAll (ui::background.withAlpha (0.97f));
@@ -435,16 +499,20 @@ void OrganixPresetBrowser::resized()
     auto p = panelBounds.reduced (23, 16);
     const int x = p.getX(), w = p.getWidth(), y = p.getY();
     closeButton.setBounds (p.getRight() - 118, y + 5, 118, 30);
+    labButton.setBounds(p.getRight()-250,y+5,119,30);
+    lab.setBounds(panelBounds.reduced(18,16));
 
     search.setBounds (x + 2, y + 76, juce::jmax (320, w - 230), 35);
     favoriteOnlyButton.setBounds (search.getRight() + 11, y + 76,
                                   p.getRight() - search.getRight() - 11, 35);
 
     const int gap = 9;
-    const int colW = (w - 2 * gap) / 3;
-    category.setBounds (x + 2, y + 122, colW - 2, 35);
-    material.setBounds (x + colW + gap, y + 122, colW - 2, 35);
-    origin.setBounds (x + 2 * (colW + gap), y + 122, w - 2 * (colW + gap) - 2, 35);
+    const int colW=(w-3*gap)/4;
+    category.setBounds(x+2,y+122,colW-2,35);
+    material.setBounds(x+colW+gap,y+122,colW-2,35);
+    origin.setBounds(x+2*(colW+gap),y+122,colW-2,35);
+    character.setBounds(x+3*(colW+gap),y+122,
+                        w-3*(colW+gap)-2,35);
     countLabel.setBounds (x + 3, y + 163, w - 6, 23);
 
     const int bottomY = panelBounds.getBottom() - 102;

@@ -40,3 +40,11 @@ add_test(NAME organix_modulation_matrix COMMAND organix_modulation_matrix)
 add_executable(organix_spectral_view spectral_view.cpp ../Source/OrganixSpectralView.cpp)
 target_compile_features(organix_spectral_view PRIVATE cxx_std_17)
 add_test(NAME organix_spectral_view COMMAND organix_spectral_view)
+
+add_executable(organix_preset_lab preset_lab.cpp)
+target_compile_features(organix_preset_lab PRIVATE cxx_std_17)
+add_test(NAME organix_preset_lab COMMAND organix_preset_lab)
+
+add_executable(organix_factory_audio_audit factory_audio_audit.cpp ../Source/MaterialDSP.cpp)
+target_compile_features(organix_factory_audio_audit PRIVATE cxx_std_17)
+add_test(NAME organix_factory_audio_audit COMMAND organix_factory_audio_audit)
