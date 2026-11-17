@@ -36,3 +36,7 @@ add_test(NAME organix_material_reactions COMMAND organix_material_reactions)
 add_executable(organix_modulation_matrix modulation_matrix.cpp ../Source/OrganixModMatrix.cpp)
 target_compile_features(organix_modulation_matrix PRIVATE cxx_std_17)
 add_test(NAME organix_modulation_matrix COMMAND organix_modulation_matrix)
+
+add_executable(organix_spectral_view spectral_view.cpp ../Source/OrganixSpectralView.cpp)
+target_compile_features(organix_spectral_view PRIVATE cxx_std_17)
+add_test(NAME organix_spectral_view COMMAND organix_spectral_view)
