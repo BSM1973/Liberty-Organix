@@ -136,7 +136,8 @@ void OrganixPresetLabView::setFrench(bool value)
 void OrganixPresetLabView::refreshLabels()
 {
     closeButton.setButtonText(ui::word(french,"RETOUR","BACK"));
-    abButton.setButtonText(activeA?"ÉCOUTER B":"ÉCOUTER A");
+    abButton.setButtonText(activeA?ui::word(french,"ÉCOUTER B","LISTEN B")
+                                  :ui::word(french,"ÉCOUTER A","LISTEN A"));
     storeA.setButtonText(ui::word(french,"MÉMORISER A","STORE A"));
     storeB.setButtonText(ui::word(french,"MÉMORISER B","STORE B"));
     undoButton.setButtonText(ui::word(french,"ANNULER","UNDO"));
@@ -151,7 +152,7 @@ void OrganixPresetLabView::refreshLabels()
         const bool on=(locks&(1u<<i))!=0;
         auto& b=lockButtons[static_cast<size_t>(i)];
         b.setButtonText((on?"[X] ":"[ ] ")+
-            juce::String(french?frNames[i]:enNames[i]));
+            juce::String::fromUTF8(french?frNames[i]:enNames[i]));
         b.setColour(juce::TextButton::buttonColourId,
                     on?juce::Colour(0xff17453f):ui::inset);
         b.setColour(juce::TextButton::textColourOffId,
@@ -342,7 +343,7 @@ void OrganixPresetLabView::paint(juce::Graphics& g)
                 12.0f,ui::accentFor(i));
     }
     heading(g,ui::word(french,
-        "MATERIALS, ROUTAGE ET GAINS RESTENT INCHANGÉS. L'ÉCOUTE FINALE SE FAIT DANS LE DAW.",
+        "MATÉRIAUX, ROUTAGE ET GAINS RESTENT INCHANGÉS. L'ÉCOUTE FINALE SE FAIT DANS LE DAW.",
         "MATERIALS, ROUTING AND GAINS STAY UNCHANGED. FINAL AUDITION IS IN YOUR DAW."),
         {18,h-31,w-36,20},9.5f,ui::subdued);
 }
