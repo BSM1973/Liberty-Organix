@@ -64,7 +64,17 @@ response="$RUNNER_TEMP/organix-notary-result.json"
   --team-id "$APPLE_NOTARY_TEAM_ID" \
   --wait --output-format json > "$response"
 status="$(/usr/bin/python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("status","Unknown"))' "$response")"
+request_id="$(/usr/bin/python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("id",""))' "$response")"
 echo "Apple notarization result: $status"
+if [[ -n "$request_id" ]]; then
+    echo "Apple notarization submission ID: $request_id"
+    # Diagnostic evidence, especially valuable for rejected Apple submissions.
+    /usr/bin/xcrun notarytool log "$request_id" \
+      --apple-id "$APPLE_NOTARY_APPLE_ID" \
+      --password "$APPLE_NOTARY_APP_PASSWORD" \
+      --team-id "$APPLE_NOTARY_TEAM_ID" \
+      release-validation/apple-notary-log.json 2>/dev/null || true
+fi
 if [[ "$status" != "Accepted" ]]; then
   echo "::error::Notary status not Accepted; no commercial installer"
   exit 1
