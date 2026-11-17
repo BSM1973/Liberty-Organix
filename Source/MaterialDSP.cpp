@@ -6,6 +6,7 @@ void MaterialDSP::prepare (double sampleRate, int channels)
 {
     fs = std::max (8000.0, sampleRate);
     delayLength = std::max (1024, static_cast<int> (std::ceil (fs * 2.0)));
+    switchFadeLength = std::max (16, static_cast<int> (std::round (fs * 0.005)));
     for (int c = 0; c < maxChannels; ++c)
     {
         state[c].delay.assign (static_cast<size_t> (delayLength), 0.0f);
@@ -24,6 +25,9 @@ void MaterialDSP::reset() noexcept
         s.lp = s.hpLP = s.smooth = s.lastInput = 0.0f;
         s.phase = s.phase2 = s.feedbackSample = s.env = 0.0f;
         s.lastModeExcitation = 0.0f;
+        s.lastOutput = s.switchAnchor = 0.0f;
+        s.switchSamples = 0;
+        s.hasRendered = false;
         std::fill (std::begin (s.oscX), std::end (s.oscX), 0.0f);
         std::fill (std::begin (s.oscY), std::end (s.oscY), 0.0f);
         s.samplesUntilGrain = 0;
@@ -36,7 +40,17 @@ void MaterialDSP::configure (Material m, Parameters params) noexcept
     if (material != m)
     {
         material = m;
-        // Existing buffers are retained: no large memory clearing in the audio callback.
+        // All channel states are preserved (tails and grains are NOT cleared).
+        // Retain the preceding wet sample as the first sample of a short
+        // output ramp. No allocation or reset in the real-time callback.
+        for (auto& s : state)
+        {
+            if (s.hasRendered)
+            {
+                s.switchAnchor = s.lastOutput;
+                s.switchSamples = switchFadeLength;
+            }
+        }
     }
     p = params;
     p.amount   = clamp (p.amount, 0.0f, 1.0f);
@@ -269,6 +283,18 @@ float MaterialDSP::process (int channel, float input, ReactionDrive reaction) no
     const float level = 1.0f + (p.shape[10] - 0.5f) * 0.50f;
     const float stereo = (p.shape[11] - 0.5f) * (channel == 1 ? 0.42f : -0.42f);
     y *= level * (1.0f + stereo);
-    return std::isfinite (y) ? clamp (y, -4.0f, 4.0f) : 0.0f;
+    y = std::isfinite (y) ? clamp (y, -4.0f, 4.0f) : 0.0f;
+    if (s.switchSamples > 0)
+    {
+        // At t=0 output equals previous wet sample; the new engine
+        // progressively takes over. The ramp is sample-rate independent.
+        const float progress = 1.0f - static_cast<float> (s.switchSamples)
+                                     / static_cast<float> (switchFadeLength);
+        y = s.switchAnchor + (y - s.switchAnchor) * progress;
+        --s.switchSamples;
+    }
+    s.lastOutput = y;
+    s.hasRendered = true;
+    return y;
 }
 }
