@@ -4,11 +4,13 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 #include <set>
 #include <sstream>
 #include <string>
 
-int main()
+int main(int argc,char** argv)
 {
     using namespace organix;
     static_assert(factoryPresets.size()==100);
@@ -80,6 +82,45 @@ int main()
     if(distinctDesigns.size()!=100||bassSafe!=10||quietMix!=10||
        paired<45||moving<25||reacting<12||matrices<30)return 11;
     for(auto n:featureUsage)if(n<12)return 12;
+    if(argc==3&&std::string(argv[1])=="--export")
+    {
+        const std::filesystem::path p(argv[2]);
+        if(!p.parent_path().empty())
+            std::filesystem::create_directories(p.parent_path());
+        std::ofstream report(p,std::ios::binary);
+        if(!report)return 13;
+        report<<"number,name,category,material_A,material_B,DNA,"
+              <<"Morph_4D,Trajectory,Material_Reactions,Mod_Matrix,"
+              <<"A_amount,A_motion,A_tone,A_feedback,"
+              <<"B_amount,B_motion,B_tone,B_feedback,"
+              <<"wet,width,output_db,macro_energy,macro_density,"
+              <<"dna_depth,reaction_amount,transient_shape,"
+              <<"trajectory_shape,trajectory_speed,"
+              <<"matrix_source,matrix_destination,matrix_depth,scene_palette\n";
+        for(size_t i=0;i<factoryPresets.size();++i)
+        {
+            const auto& p=factoryPresets[i];
+            const auto& d=factorySoundDesigns[i];
+            const auto mask=d.technologies;
+            report<<(i+1)<<",\""<<p.name<<"\","<<p.category<<","
+                  <<static_cast<int>(p.a)<<","
+                  <<(p.b>=0?p.b:
+                     (static_cast<int>(p.a)+(d.scenePalette%3)+1)%6)<<","
+                  <<((mask&D)!=0)<<","<<((mask&(M|T))!=0)<<","
+                  <<((mask&T)!=0)<<","<<((mask&R)!=0)<<","
+                  <<((mask&X)!=0)<<","
+                  <<d.aAmount<<","<<d.aMotion<<","<<d.aTone<<","<<d.aFeedback<<","
+                  <<d.bAmount<<","<<d.bMotion<<","<<d.bTone<<","<<d.bFeedback<<","
+                  <<d.wet<<","<<d.width<<","<<d.outputDb<<","
+                  <<d.energy<<","<<d.density<<","
+                  <<d.dnaDepth<<","<<d.reactionDepth<<","<<d.transient<<","
+                  <<static_cast<int>(d.trajectoryShape)<<","<<d.speed<<","
+                  <<static_cast<int>(d.modulationSource)<<","
+                  <<static_cast<int>(d.modulationTarget)<<","
+                  <<d.modulationDepth<<","<<static_cast<int>(d.scenePalette)<<"\n";
+        }
+        if(!report.good())return 14;
+    }
     std::cout<<"PASS 100 individual profiles; DNA="<<featureUsage[0]
              <<", Morph="<<featureUsage[1]
              <<", Trajectory="<<featureUsage[2]
