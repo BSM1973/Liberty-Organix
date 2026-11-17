@@ -33,7 +33,7 @@ réexporter avec le même mot de passe (le workflow attend une valeur commune).
 
 1. Ouvrir `https://github.com/BSM1973/Liberty-Organix/actions/workflows/commercial-release.yml`.
 2. Cliquer sur **Run workflow** / **Exécuter le workflow**.
-3. Sélectionner **main**, puis **Run workflow**.
+3. Sélectionner la branche **release/organix-notarization-one-click** pour une première notarisation sur la branche dédiée, ou **main** après fusion, puis **Run workflow**.
 4. Si tous les contrôles sont verts, télécharger l'Artifact
    **Organix-macOS-vX.Y.Z-SIGNED-NOTARIZED-PKG**.
 5. Livrer uniquement ce `.pkg` aux clients, jamais une archive CI unsigned
