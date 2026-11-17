@@ -81,7 +81,7 @@ OrganixPresetLabView::OrganixPresetLabView(OrganixAudioProcessor& p):audio(p)
     }
     for(auto& b:lockButtons){style(b);addAndMakeVisible(b);}
     for(auto& b:storeVariation){style(b);addAndMakeVisible(b);}
-    for(auto& b:recallVariation){style(b);addAndMakeVisible(b);}
+    for(auto& b:recallVariationButtons){style(b);addAndMakeVisible(b);}
     intensity.setRange(0.05,1.0,0.01);
     intensity.setValue(0.38,juce::dontSendNotification);
     intensity.setSliderStyle(juce::Slider::LinearHorizontal);
@@ -118,7 +118,7 @@ OrganixPresetLabView::OrganixPresetLabView(OrganixAudioProcessor& p):audio(p)
     {
         storeVariation[static_cast<size_t>(i)].onClick=[this,i]
         {captureVariation(i);};
-        recallVariation[static_cast<size_t>(i)].onClick=[this,i]
+        recallVariationButtons[static_cast<size_t>(i)].onClick=[this,i]
         {recallVariation(i);};
     }
     tracked=capture();
@@ -161,9 +161,9 @@ void OrganixPresetLabView::refreshLabels()
     {
         storeVariation[static_cast<size_t>(i)].setButtonText(
             ui::word(french,"CAPTURER ","STORE ")+juce::String(i+1));
-        recallVariation[static_cast<size_t>(i)].setButtonText(
+        recallVariationButtons[static_cast<size_t>(i)].setButtonText(
             ui::word(french,"ÉCOUTER ","RECALL ")+juce::String(i+1));
-        recallVariation[static_cast<size_t>(i)].setEnabled(
+        recallVariationButtons[static_cast<size_t>(i)].setEnabled(
             !variations[static_cast<size_t>(i)].isEmpty());
     }
     undoButton.setEnabled(!undo.empty());
@@ -368,7 +368,7 @@ void OrganixPresetLabView::resized()
     {
         const int x=17+i*(col+5);
         storeVariation[static_cast<size_t>(i)].setBounds(x+10,375,col-20,28);
-        recallVariation[static_cast<size_t>(i)].setBounds(x+10,411,col-20,28);
+        recallVariationButtons[static_cast<size_t>(i)].setBounds(x+10,411,col-20,28);
     }
     status.setBounds(18,std::max(463,h-61),w-36,25);
 }
