@@ -45,6 +45,10 @@ add_executable(organix_preset_lab preset_lab.cpp)
 target_compile_features(organix_preset_lab PRIVATE cxx_std_17)
 add_test(NAME organix_preset_lab COMMAND organix_preset_lab)
 
-add_executable(organix_factory_audio_audit factory_audio_audit.cpp ../Source/MaterialDSP.cpp)
+add_executable(organix_factory_audio_audit factory_audio_audit.cpp ../Source/MaterialDSP.cpp ../Source/MaterialReactions.cpp)
 target_compile_features(organix_factory_audio_audit PRIVATE cxx_std_17)
 add_test(NAME organix_factory_audio_audit COMMAND organix_factory_audio_audit)
+
+add_executable(organix_factory_sound_designs factory_sound_designs.cpp)
+target_compile_features(organix_factory_sound_designs PRIVATE cxx_std_17)
+add_test(NAME organix_factory_sound_designs COMMAND organix_factory_sound_designs)
