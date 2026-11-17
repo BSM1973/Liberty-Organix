@@ -49,7 +49,7 @@ private:
     juce::TextButton closeButton,abButton,storeA,storeB,undoButton,redoButton,
                      mutateButton;
     std::array<juce::TextButton,5> lockButtons;
-    std::array<juce::TextButton,4> storeVariation,recallVariation;
+    std::array<juce::TextButton,4> storeVariation,recallVariationButtons;
     juce::Slider intensity;
     juce::Label status;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OrganixPresetLabView)
