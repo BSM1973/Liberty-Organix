@@ -1198,11 +1198,11 @@ void OrganixAudioProcessorEditor::resized()
     }
 
     auto headActions = headerBounds;
-    macroToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
-    dnaToggle.setBounds (headActions.removeFromRight (82).reduced (4, 25));
-    morphToggle.setBounds (headActions.removeFromRight (86).reduced (4, 25));
-    engaged.setBounds (headActions.removeFromRight (120).reduced (5, 25));
-    auto languageArea = headActions.removeFromRight (127).reduced (8, 25);
+    macroToggle.setBounds (headActions.removeFromRight (82).reduced (3, 25));
+    dnaToggle.setBounds (headActions.removeFromRight (76).reduced (3, 25));
+    morphToggle.setBounds (headActions.removeFromRight (82).reduced (3, 25));
+    engaged.setBounds (headActions.removeFromRight (110).reduced (4, 25));
+    auto languageArea = headActions.removeFromRight (114).reduced (6, 25);
     const int langHalf = languageArea.getWidth() / 2;
     languageFR.setBounds (languageArea.getX(), languageArea.getY(),
                           langHalf - 2, languageArea.getHeight());
@@ -1214,10 +1214,10 @@ void OrganixAudioProcessorEditor::resized()
     // Fixed toolbar geometry avoids collisions with the 310px Liberty brand.
     auto controlsRect = headActions.removeFromRight (
         juce::jmin (485, juce::jmax (310, headActions.getWidth() - 370)));
-    midiLearnButton.setBounds (controlsRect.removeFromRight (76).reduced (3, 25));
-    browserButton.setBounds (controlsRect.removeFromRight (111).reduced (3, 25));
-    next.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
-    previous.setBounds (controlsRect.removeFromRight (36).reduced (2, 25));
+    midiLearnButton.setBounds (controlsRect.removeFromRight (56).reduced (2, 25));
+    browserButton.setBounds (controlsRect.removeFromRight (104).reduced (2, 25));
+    next.setBounds (controlsRect.removeFromRight (32).reduced (2, 25));
+    previous.setBounds (controlsRect.removeFromRight (32).reduced (2, 25));
     presetDisplay.setBounds (controlsRect.reduced (3, 25));
 
     const auto leftPad = leftBounds.reduced (12, 8);
