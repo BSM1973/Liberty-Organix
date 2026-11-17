@@ -1,0 +1,97 @@
+name: ORGANIX COMMERCIAL RELEASE — APPLE SIGNED + NOTARIZED
+
+# Credentials only available during manual dispatch from main, never PR CI.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: organix-commercial-release
+  cancel-in-progress: false
+
+jobs:
+  signed-macos-pkg:
+    if: github.ref == 'refs/heads/main'
+    name: Build, validate, sign, notarize, install AU/VST3
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - name: Checkout trusted main source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate ARM64 build and read version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "arm64"
+          python3 tools/check_ui_text.py
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import re,pathlib
+          match=re.search(r"project\(Organix VERSION (\d+\.\d+\.\d+)",
+              pathlib.Path("CMakeLists.txt").read_text(encoding="utf-8"))
+          if not match: raise SystemExit("Missing version")
+          print("number="+match.group(1))
+          PY
+      - name: Build AU, VST3 and run all JUCE tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel 2
+          ctest --test-dir build -C Release --output-on-failure
+      - name: Validate actual plugins with pluginval VST3 and Apple auval
+        shell: bash
+        run: bash tools/validate_macos_plugins.sh
+      - name: Test clean unsigned QA package installation
+        shell: bash
+        run: bash tools/macos_pkg_qa.sh "${{ steps.version.outputs.number }}"
+      - name: Developer ID sign, Apple notarize and verify commercial installer
+        shell: bash
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          APPLE_P12_PASSWORD: ${{ secrets.APPLE_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: bash tools/macos_sign_notarize.sh "${{ steps.version.outputs.number }}"
+      - name: Publish Apple-Accepted and stapled installer only
+        id: published
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-macOS-v${{ steps.version.outputs.number }}-SIGNED-NOTARIZED-PKG
+          path: release-output/Organix-v${{ steps.version.outputs.number }}-macOS-SIGNED-NOTARIZED.pkg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - name: Redownload the published installer
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.published.outputs.artifact-id }}
+          path: release-verified
+          merge-multiple: true
+      - name: Reverify exact downloadable .pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="release-verified/Organix-v${{ steps.version.outputs.number }}-macOS-SIGNED-NOTARIZED.pkg"
+          test -s "$pkg"
+          /usr/sbin/pkgutil --check-signature "$pkg"
+          /usr/bin/xcrun stapler validate "$pkg"
+          /usr/sbin/spctl --assess --type install --verbose=2 "$pkg"
+          /usr/bin/shasum -a 256 "$pkg"
+      - name: Publish validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-commercial-release-validation
+          path: |
+            validation-logs/*.txt
+            installer-qa/*.txt
+            release-validation/*.txt
+          if-no-files-found: warn
+          retention-days: 90

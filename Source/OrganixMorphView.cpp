@@ -307,6 +307,7 @@ OrganixMorphControls::OrganixMorphControls (OrganixAudioProcessor& processor)
         refresh();
     };
     addAndMakeVisible (enableButton);
+    enableButton.setComponentID ("midi:morphEnable");
     for (int i = 0; i < 4; ++i)
     {
         capture[static_cast<size_t> (i)].onClick = [this, i]

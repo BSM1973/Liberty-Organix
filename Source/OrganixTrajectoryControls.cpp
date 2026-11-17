@@ -71,6 +71,13 @@ OrganixTrajectoryControls::OrganixTrajectoryControls (OrganixAudioProcessor& p) 
     }
     status.setJustificationType (juce::Justification::centred);
     status.setColour (juce::Label::textColourId, ui::accentFor (0));
+    playback.setComponentID ("midi:trajectoryEnable");
+    freeSync.setComponentID ("midi:trajectoryFree");
+    direction.setComponentID ("midi:trajectoryReverse");
+    shape.setComponentID ("midi:trajectoryShape");
+    beat.setComponentID ("midi:trajectoryDivision");
+    speed.setComponentID ("midi:trajectorySpeed");
+    depth.setComponentID ("midi:trajectoryDepth");
     shapeLink = std::make_unique<ComboLink> (audio.parameters, "trajectoryShape", shape);
     beatLink = std::make_unique<ComboLink> (audio.parameters, "trajectoryDivision", beat);
     speedLink = std::make_unique<SliderLink> (audio.parameters, "trajectorySpeed", speed);

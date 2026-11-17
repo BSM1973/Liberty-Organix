@@ -14,12 +14,13 @@
 #include <array>
 #include <cstdint>
 #include <atomic>
+#include <vector>
 
-class OrganixAudioProcessor final : public juce::AudioProcessor
+class OrganixAudioProcessor final : public juce::AudioProcessor, private juce::Timer
 {
 public:
     OrganixAudioProcessor();
-    ~OrganixAudioProcessor() override = default;
+    ~OrganixAudioProcessor() override { stopTimer(); }
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
@@ -63,9 +64,39 @@ public:
     std::atomic<float> dnaCentroid {0.0f}, dnaLow {0.0f}, dnaMid {0.0f}, dnaHigh {0.0f};
     std::atomic<int> currentPreset {0};
 
+    // MIDI CC learn. User interface and state serialization run on the JUCE
+    // message thread. The audio callback only touches preallocated atomics.
+    // A mapped CC from the learned MIDI channel controls one APVTS parameter.
+    void startMidiLearn (const juce::String& parameterId) noexcept;
+    void cancelMidiLearn() noexcept { midiLearnTarget.store (-1, std::memory_order_release); }
+    bool isMidiLearning() const noexcept { return midiLearnTarget.load (std::memory_order_acquire) >= 0; }
+    juce::String midiLearnTargetName() const;
+    juce::String midiLearnMapping (const juce::String& parameterId) const;
+    void clearMidiLearn (const juce::String& parameterId) noexcept;
+    void clearAllMidiLearn() noexcept;
+    // Deterministic message-thread test entry. Never invoke from processBlock().
+    void flushMidiLearnUpdates();
+
+    static constexpr int midiLearnCapacity = 512;
+    static constexpr int midiCCSlots = 16 * 128;
+
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
 
 private:
+    void timerCallback() override;
+    void initialiseMidiLearn() noexcept;
+    void handleMidiLearn (const juce::MidiBuffer& incoming) noexcept;
+    juce::String serialiseMidiLearn() const;
+    void restoreMidiLearn (const juce::String& data);
+    int midiIndex (const juce::String& parameterId) const noexcept;
+    std::array<std::atomic<int>,midiCCSlots> ccParameterIndex {};
+    std::array<std::atomic<float>,midiLearnCapacity> midiValues {};
+    std::array<std::atomic<bool>,midiLearnCapacity> midiDirty {};
+    std::array<juce::RangedAudioParameter*,midiLearnCapacity> midiParameters {};
+    std::array<juce::String,midiLearnCapacity> midiParameterIds {};
+    int midiParameterCount = 0;
+    std::atomic<int> midiLearnTarget {-1};
+
     organix::MaterialDSP engineA;
     organix::MaterialDSP engineB;
     organix::MaterialReactionLink reactionLink;

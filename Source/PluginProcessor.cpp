@@ -16,7 +16,10 @@ OrganixAudioProcessor::OrganixAudioProcessor()
       parameters (*this, nullptr, "ORGANIX_STATE", makeLayout())
 {
     initialiseMatrixParameterPointers();
+    initialiseMidiLearn();
     loadFactoryPreset (0);
+    // The processor owns MIDI CC dispatch independently of the editor.
+    startTimerHz (60);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeLayout()
@@ -291,8 +294,8 @@ float OrganixAudioProcessor::raw (juce::AudioProcessorValueTreeState& state, con
 
 void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    juce::ignoreUnused (midi);
     juce::ScopedNoDenormals noDenormals;
+    handleMidiLearn (midi);
     const auto channels = std::min (2, buffer.getNumChannels());
     const int n = buffer.getNumSamples();
     if (channels <= 0 || n <= 0) return;
@@ -685,6 +688,155 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const float prior=audioCpuPercent.load(std::memory_order_relaxed);
     audioCpuPercent.store(prior+(actual-prior)*(actual>prior?0.20f:0.07f),
                           std::memory_order_relaxed);
+}
+
+
+void OrganixAudioProcessor::initialiseMidiLearn() noexcept
+{
+    for (auto& entry : ccParameterIndex) entry.store (-1, std::memory_order_relaxed);
+    for (auto& entry : midiDirty) entry.store (false, std::memory_order_relaxed);
+    for (auto& entry : midiValues) entry.store (0.0f, std::memory_order_relaxed);
+    const auto& parameterList = getParameters();
+    midiParameterCount = juce::jmin (midiLearnCapacity, parameterList.size());
+    jassert (parameterList.size() <= midiLearnCapacity);
+    for (int i = 0; i < midiParameterCount; ++i)
+    {
+        auto* param = dynamic_cast<juce::RangedAudioParameter*> (parameterList[i]);
+        auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (parameterList[i]);
+        midiParameters[static_cast<size_t> (i)] = param;
+        midiParameterIds[static_cast<size_t> (i)] =
+            withId != nullptr ? withId->getParameterID() : juce::String();
+    }
+}
+
+int OrganixAudioProcessor::midiIndex (const juce::String& id) const noexcept
+{
+    if (id.isEmpty()) return -1;
+    for (int i = 0; i < midiParameterCount; ++i)
+        if (midiParameterIds[static_cast<size_t> (i)] == id
+            && midiParameters[static_cast<size_t> (i)] != nullptr)
+            return i;
+    return -1;
+}
+
+void OrganixAudioProcessor::startMidiLearn (const juce::String& id) noexcept
+{
+    midiLearnTarget.store (midiIndex (id), std::memory_order_release);
+}
+
+juce::String OrganixAudioProcessor::midiLearnTargetName() const
+{
+    const int index = midiLearnTarget.load (std::memory_order_acquire);
+    if (index < 0 || index >= midiParameterCount) return {};
+    return midiParameterIds[static_cast<size_t> (index)];
+}
+
+juce::String OrganixAudioProcessor::midiLearnMapping (const juce::String& id) const
+{
+    const int target = midiIndex (id);
+    if (target < 0) return {};
+    for (int slot = 0; slot < midiCCSlots; ++slot)
+        if (ccParameterIndex[static_cast<size_t> (slot)].load (std::memory_order_acquire) == target)
+            return "CH " + juce::String (slot / 128 + 1) + " / CC " + juce::String (slot % 128);
+    return {};
+}
+
+void OrganixAudioProcessor::clearMidiLearn (const juce::String& id) noexcept
+{
+    const int target = midiIndex (id);
+    if (target < 0) return;
+    for (auto& slot : ccParameterIndex)
+        if (slot.load (std::memory_order_relaxed) == target)
+            slot.store (-1, std::memory_order_release);
+    midiDirty[static_cast<size_t> (target)].store (false, std::memory_order_release);
+    if (midiLearnTarget.load (std::memory_order_relaxed) == target)
+        midiLearnTarget.store (-1, std::memory_order_release);
+}
+
+void OrganixAudioProcessor::clearAllMidiLearn() noexcept
+{
+    midiLearnTarget.store (-1, std::memory_order_release);
+    for (auto& slot : ccParameterIndex) slot.store (-1, std::memory_order_release);
+    for (auto& dirty : midiDirty) dirty.store (false, std::memory_order_release);
+}
+
+void OrganixAudioProcessor::handleMidiLearn (const juce::MidiBuffer& incoming) noexcept
+{
+    // Lock-free/zero-allocation MIDI message processing; the DAW's MIDI events
+    // are left intact. Actual JUCE host notifications occur on Timer thread.
+    for (const auto metadata : incoming)
+    {
+        // Inspect raw three-byte MIDI CC messages without constructing
+        // MidiMessage objects. getMessage() can allocate for large SysEx.
+        if (metadata.data == nullptr || metadata.numBytes != 3 ||
+            (metadata.data[0] & 0xf0u) != 0xb0u) continue;
+        const int cc = metadata.data[1];
+        const int value = metadata.data[2];
+        const int channel = (metadata.data[0] & 0x0fu) + 1;
+        if (cc < 1 || cc > 119) continue;
+        const int slot = (channel - 1) * 128 + cc;
+        const int target = midiLearnTarget.exchange (-1, std::memory_order_acq_rel);
+        if (target >= 0 && target < midiParameterCount)
+        {
+            // A single physical CC moves one parameter; a parameter is allowed
+            // to have more than one learned controller across MIDI channels.
+            ccParameterIndex[static_cast<size_t> (slot)].store (target, std::memory_order_release);
+        }
+        const int mapped = ccParameterIndex[static_cast<size_t> (slot)].load (std::memory_order_acquire);
+        if (mapped >= 0 && mapped < midiParameterCount)
+        {
+            midiValues[static_cast<size_t> (mapped)].store (
+                value / 127.0f, std::memory_order_relaxed);
+            midiDirty[static_cast<size_t> (mapped)].store (true, std::memory_order_release);
+        }
+    }
+}
+
+void OrganixAudioProcessor::flushMidiLearnUpdates()
+{
+    // Message thread only: never call setValueNotifyingHost on audio thread.
+    for (int index = 0; index < midiParameterCount; ++index)
+    {
+        if (! midiDirty[static_cast<size_t> (index)].exchange (
+                false, std::memory_order_acq_rel)) continue;
+        if (auto* param = midiParameters[static_cast<size_t> (index)])
+            param->setValueNotifyingHost (
+                midiValues[static_cast<size_t> (index)].load (std::memory_order_acquire));
+    }
+}
+void OrganixAudioProcessor::timerCallback() { flushMidiLearnUpdates(); }
+
+juce::String OrganixAudioProcessor::serialiseMidiLearn() const
+{
+    // Stable parameter IDs, not fragile process-local parameter indices.
+    juce::StringArray mappings;
+    for (int slot = 0; slot < midiCCSlots; ++slot)
+    {
+        const int idx = ccParameterIndex[static_cast<size_t> (slot)].load (std::memory_order_acquire);
+        if (idx < 0 || idx >= midiParameterCount) continue;
+        const auto& id = midiParameterIds[static_cast<size_t> (idx)];
+        if (id.isNotEmpty())
+            mappings.add (juce::String (slot / 128 + 1) + ":" +
+                          juce::String (slot % 128) + ":" + id);
+    }
+    return mappings.joinIntoString ("|");
+}
+void OrganixAudioProcessor::restoreMidiLearn (const juce::String& data)
+{
+    clearAllMidiLearn();
+    const auto mappings = juce::StringArray::fromTokens (data, "|", "");
+    for (const auto& row : mappings)
+    {
+        const auto fields = juce::StringArray::fromTokens (row, ":", "");
+        if (fields.size() != 3) continue;
+        if (! fields[0].containsOnly ("0123456789") ||
+            ! fields[1].containsOnly ("0123456789")) continue;
+        const int ch = fields[0].getIntValue(), cc = fields[1].getIntValue();
+        const int idx = midiIndex (fields[2]);
+        if (ch >= 1 && ch <= 16 && cc >= 1 && cc <= 119 && idx >= 0)
+            ccParameterIndex[static_cast<size_t> ((ch - 1) * 128 + cc)]
+                .store (idx, std::memory_order_release);
+    }
 }
 
 void OrganixAudioProcessor::setParameter (const char* id, float value)
@@ -1122,6 +1274,7 @@ void OrganixAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
 {
     auto snapshot = parameters.copyState();
     snapshot.setProperty ("factoryPresetIndex", currentPreset.load(), nullptr);
+    snapshot.setProperty ("midiLearnMappingsV1", serialiseMidiLearn(), nullptr);
     if (auto xml = snapshot.createXml()) copyXmlToBinary (*xml, dest);
 }
 void OrganixAudioProcessor::setStateInformation (const void* data, int size)
@@ -1133,6 +1286,7 @@ void OrganixAudioProcessor::setStateInformation (const void* data, int size)
             auto state = juce::ValueTree::fromXml (*xml);
             currentPreset.store (juce::jlimit (0, 99, static_cast<int> (state.getProperty ("factoryPresetIndex", 0))));
             parameters.replaceState (state);
+            restoreMidiLearn (state.getProperty ("midiLearnMappingsV1").toString());
             organix::TrajectoryPath restoredPath;
             if (decodeTrajectory (state.getProperty ("trajectoryPoints").toString(), restoredPath))
                 setTrajectoryPath (restoredPath, false);
