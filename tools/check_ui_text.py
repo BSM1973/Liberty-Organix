@@ -30,6 +30,8 @@ UI_FILES = [
     "OrganixReactionPanel.h",
     "OrganixModMatrixView.cpp",
     "OrganixModMatrixView.h",
+    "OrganixSpectralView.cpp",
+    "OrganixSpectralView.h",
 ]
 # These are known to render as missing-glyph boxes or stray symbols on some
 # hosts/fonts. Use ASCII or draw vector icons rather than font characters.
