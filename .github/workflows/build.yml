@@ -109,6 +109,17 @@ jobs:
           path: stress-report/organix_audio_stress.csv
           if-no-files-found: error
           retention-days: 90
+      - name: Validate REAL AU and VST3 binaries with auval and pluginval
+        shell: bash
+        run: bash tools/validate_macos_plugins.sh
+      - name: Publish native AU and VST3 validator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Organix-Host-Validation-Logs-v${{ steps.version.outputs.number }}
+          path: validation-logs/
+          if-no-files-found: warn
+          retention-days: 90
       - name: Verify AU and VST3 are native ARM64 and package them
         shell: bash
         run: |
