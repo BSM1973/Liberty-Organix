@@ -202,7 +202,9 @@ int main(int argc,char** argv)
             <<"gain_vs_input_db,peak_dbfs,crest_db,stereo_correlation,"
             <<"DNA_off_rms_delta_db,Morph_off_rms_delta_db,"
             <<"Trajectory_off_rms_delta_db,Reactions_off_rms_delta_db,"
-            <<"Matrix_off_rms_delta_db,flag,review_status\n";
+            <<"Matrix_off_rms_delta_db,DNA_diff_dbfs,Morph_diff_dbfs,"
+            <<"Trajectory_diff_dbfs,Reactions_diff_dbfs,Matrix_diff_dbfs,"
+            <<"flag,review_status\n";
     }
     int nonfinite=0,silent=0,focusCount=0,featureChecks=0;
     for(int i=0;i<100;++i)
@@ -212,26 +214,38 @@ int main(int argc,char** argv)
         const bool priority=isFocus(i+1);
         // Long WAV only for 16 priority cases; other programs get a 1s
         // output measurement. All paths use actual processBlock().
-        const auto on=process(i,priority?3:1,nullptr,priority&&save);
+        const auto on=process(i,1,nullptr,true);
         if(!on.finite){++nonfinite;continue;}
         if(on.rms<1.0e-6)++silent;
         if(priority&&save)
         {
             ++focusCount;
             const auto number=std::to_string(1000+i+1).substr(1);
+            const auto extended=process(i,3,nullptr,true);
+            if(!extended.finite){++nonfinite;continue;}
             writeStereoWav(destination/(number+"_"+filename(preset.name)+
-                "_real_processor.wav"),on.output);
+                "_real_processor.wav"),extended.output);
         }
-        std::array<double,5> offDelta{};
+        std::array<double,5> offDelta{}, audibleDifference{};
         offDelta.fill(std::numeric_limits<double>::quiet_NaN());
+        audibleDifference.fill(std::numeric_limits<double>::quiet_NaN());
         for(size_t feature=0;feature<featureFlags.size();++feature)
         {
             if((design.technologies&featureFlags[feature])==0)continue;
             // Compare outputs with the named technology disabled, using
             // the SAME input signal and completely reset DSP/transport.
-            const auto off=process(i,1,switchIds[feature],false);
+            const auto off=process(i,1,switchIds[feature],true);
             if(!off.finite){++nonfinite;continue;}
             offDelta[feature]=asDb(on.rms)-asDb(off.rms);
+            double squaredDifference=0.0;
+            const auto total=std::min(on.output.size(),off.output.size());
+            for(size_t frame=0;frame<total;++frame)
+            {
+                const double change=on.output[frame]-off.output[frame];
+                squaredDifference+=change*change;
+            }
+            audibleDifference[feature]=asDb(std::sqrt(
+                squaredDifference/std::max<size_t>(1,total)));
             ++featureChecks;
         }
         if(save)
@@ -243,6 +257,11 @@ int main(int argc,char** argv)
                <<asDb(on.peak)<<","<<asDb(on.peak)-asDb(on.rms)<<","
                <<on.correlation;
             for(auto v:offDelta)
+            {
+                csv<<",";
+                if(std::isfinite(v))csv<<v;
+            }
+            for(auto v:audibleDifference)
             {
                 csv<<",";
                 if(std::isfinite(v))csv<<v;
