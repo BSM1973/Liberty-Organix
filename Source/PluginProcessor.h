@@ -10,6 +10,7 @@
 #include "MaterialReactions.h"
 #include "OrganixModMatrix.h"
 #include "OrganixSpectralView.h"
+#include "OrganixSpectralTransient.h"
 #include <array>
 #include <cstdint>
 #include <atomic>
@@ -111,8 +112,7 @@ private:
                                   organix::MorphScene& scene);
     juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
     juce::LinearSmoothedValue<float> transientDepthSmooth;
-    std::array<float,2> transientFast {}, transientSlow {};
-    float transientFastCoefficient = 0.0f, transientSlowCoefficient = 0.0f;
+    organix::SpectralTransientShaper transientShaper;
     float lastMeterLevel = 0.0f;
     float movementPhase = 0.0f;
     float movementHeld = 0.0f;
