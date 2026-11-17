@@ -60,7 +60,8 @@ inline bool matchesCharacter(const FactoryPreset& p,PresetCharacter ch) noexcept
     {
         case PresetCharacter::Ambient:
             return p.category==1||p.category==7||has("atmosphere")||
-                   has("cloud")||has("ambient")||has("ethereal");
+                   has("cloud")||has("ambient")||has("ethereal")||
+                   has("diffuse")||has("ghost");
         case PresetCharacter::Warm:
             return has("warm")||has("soft")||has("smooth")||has("gentle")||
                    has("organic")||p.category==10;
@@ -81,7 +82,7 @@ inline bool matchesCharacter(const FactoryPreset& p,PresetCharacter ch) noexcept
                    has("resonan")||has("percuss");
         case PresetCharacter::Aggressive:
             return p.category==8||has("aggressive")||has("destruct")||
-                   has("distortion")||has("intense");
+                   has("distortion")||has("intense")||has("powerful");
         case PresetCharacter::Soft:
             return p.category==7||p.category==10||has("delicate")||
                    has("subtle")||has("gentle")||has("peaceful");
