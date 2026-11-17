@@ -151,6 +151,28 @@ static bool accepts (int width, int height)
         matrixListBottom + 37 > matrixWorkspace.h ||
         // Four envelope sliders end at y=474+3*33+29.
         474 + 3*33+29 > matrixWorkspace.h-22) return false;
+    // SPECTRAL VIEW v1.1 retains all six skins and the existing XY field.
+    // Its mode toggle and transient editor sit strictly in the 89..115
+    // title row; FFT curves stay above XY drag help and 4-column meters.
+    const int spectrumW=g.center.w, spectrumH=g.center.h;
+    const Rect transientLabel {153,89,96,25};
+    const Rect transientSlider {250,89,157,26};
+    const Rect modeButton {spectrumW-137,89,117,26};
+    const Rect topStatus {24,89,125,24};
+    const Rect fftPlot {31,138,spectrumW-62,
+        std::min(80,static_cast<int>((spectrumH-214)*0.21f))};
+    const int meterY=spectrumH-73;
+    const int colW=std::max(85,(spectrumW-40)/4);
+    const Rect lastMeter {23+3*colW,meterY+9,colW-12,45};
+    if (transientLabel.intersects(transientSlider) ||
+        transientSlider.intersects(modeButton) ||
+        topStatus.intersects(transientLabel) ||
+        transientSlider.bottom()>=fftPlot.y ||
+        modeButton.right()>spectrumW ||
+        fftPlot.w < 500 || fftPlot.h < 20 ||
+        fftPlot.bottom()>spectrumH-130 ||
+        lastMeter.right()>spectrumW-16 ||
+        lastMeter.bottom()>spectrumH-10) return false;
     return true;
 }
 int main()
