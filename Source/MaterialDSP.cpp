@@ -13,6 +13,7 @@ void MaterialDSP::prepare (double sampleRate, int channels)
         state[c].rng = 0xA328F3D1u ^ static_cast<unsigned> (c * 3571 + channels);
     }
     reset();
+    modeTone = modeFeedback = -1.0f; // invalidate when sample rate changes
     updateModes();
 }
 
@@ -72,19 +73,35 @@ void MaterialDSP::configure (Material m, Parameters params) noexcept
 
 void MaterialDSP::updateModes() noexcept
 {
+    // A short-buffer host may call configure thousands of times per second.
+    // Sin/cos only depend on pitch+material; decays only on feedback+material.
+    // This preserves exact coefficients when their inputs have not changed.
+    const bool pitchChanged = material != modeMaterial || p.tone != modeTone;
+    const bool decayChanged = material != modeMaterial || p.feedback != modeFeedback;
+    if (! pitchChanged && ! decayChanged) return;
+
     constexpr std::array<float, modes> harmonic {1.0f, 1.50f, 2.01f, 2.99f};
     constexpr std::array<float, modes> metallic {1.0f, 1.4142f, 2.398f, 3.89f};
     const bool isMetal = material == Material::Metal;
-    const float fundamental = (isMetal ? 105.0f : 190.0f) * std::pow (2.0f, 2.2f * p.tone);
-    const float time = (isMetal ? 0.11f : 0.24f) + (isMetal ? 1.6f : 2.2f) * p.feedback;
+    const float fundamental = pitchChanged
+        ? (isMetal ? 105.0f : 190.0f) * std::pow (2.0f, 2.2f * p.tone) : 0.0f;
+    const float time = decayChanged
+        ? (isMetal ? 0.11f : 0.24f) + (isMetal ? 1.6f : 2.2f) * p.feedback : 0.0f;
     for (int i = 0; i < modes; ++i)
     {
-        const float frequency = std::min (static_cast<float> (fs * 0.44), fundamental * (isMetal ? metallic[i] : harmonic[i]));
-        const float w = 2.0f * pi * frequency / static_cast<float> (fs);
-        modeSin[i] = std::sin (w);
-        modeCos[i] = std::cos (w);
-        modeDecay[i] = std::exp (-1.0f / (static_cast<float> (fs) * time / (1.0f + 0.42f * i)));
+        if (pitchChanged)
+        {
+            const float frequency = std::min (static_cast<float> (fs * 0.44), fundamental * (isMetal ? metallic[i] : harmonic[i]));
+            const float w = 2.0f * pi * frequency / static_cast<float> (fs);
+            modeSin[i] = std::sin (w);
+            modeCos[i] = std::cos (w);
+        }
+        if (decayChanged)
+            modeDecay[i] = std::exp (-1.0f / (static_cast<float> (fs) * time / (1.0f + 0.42f * i)));
     }
+    modeMaterial = material;
+    modeTone = p.tone;
+    modeFeedback = p.feedback;
 }
 
 float MaterialDSP::readAt (const ChannelState& s, float index) const noexcept
