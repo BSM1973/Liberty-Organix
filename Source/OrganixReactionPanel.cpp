@@ -77,6 +77,10 @@ OrganixReactionPanel::OrganixReactionPanel (OrganixAudioProcessor& p) : audio (p
         addAndMakeVisible (*label);
     }
 
+    power.setComponentID ("midi:reactionEnable");
+    direction.setComponentID ("midi:reactionDirection");
+    amount.setComponentID ("midi:reactionAmount");
+    response.setComponentID ("midi:reactionResponse");
     setFrench (true);
     directionLink = std::make_unique<ComboAttachment> (
         audio.parameters, "reactionDirection", direction);
