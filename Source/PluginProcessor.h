@@ -9,6 +9,8 @@
 #include "OrganixTrajectory.h"
 #include "MaterialReactions.h"
 #include "OrganixModMatrix.h"
+#include "OrganixSpectralView.h"
+#include "OrganixSpectralTransient.h"
 #include <array>
 #include <cstdint>
 #include <atomic>
@@ -49,6 +51,9 @@ public:
     std::atomic<float> inputRms {0.0f};
     std::atomic<float> outputRms {0.0f};
     std::atomic<float> outputPeak {0.0f};
+    // Dual FFT readouts are lock-free for the 30Hz central UI.
+    organix::SpectralViewAnalyzer spectralView;
+    std::atomic<float> audioCpuPercent {0.0f};
     // Values from the audio engine, observed by the reaction panel only.
     std::atomic<float> reactionActivityAB {0.0f}, reactionActivityBA {0.0f};
     std::array<std::atomic<float>,organix::MatrixSettings::slotCount> matrixSlotActivity {};
@@ -106,6 +111,8 @@ private:
     static bool decodeMorphScene (const juce::String& text,
                                   organix::MorphScene& scene);
     juce::LinearSmoothedValue<float> wetSmooth, bypassSmooth, outputSmooth, widthSmooth;
+    juce::LinearSmoothedValue<float> transientDepthSmooth;
+    organix::SpectralTransientShaper transientShaper;
     float lastMeterLevel = 0.0f;
     float movementPhase = 0.0f;
     float movementHeld = 0.0f;

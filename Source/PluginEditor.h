@@ -20,6 +20,7 @@ public:
     explicit MatterView (OrganixAudioProcessor&);
     ~MatterView() override;
     void paint (juce::Graphics&) override;
+    void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
@@ -36,6 +37,10 @@ private:
     float clock = 0.0f;
     float visualRms = 0.0f, visualPeak = 0.0f;
     float materialReveal = 1.0f;
+    juce::TextButton spectrumMode { "AVANT / APRÈS" };
+    juce::Slider transientControl;
+    juce::Label transientLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> transientAttachment;
     int priorMaterial = -1;
     juce::RangedAudioParameter* gestureX = nullptr;
     juce::RangedAudioParameter* gestureY = nullptr;

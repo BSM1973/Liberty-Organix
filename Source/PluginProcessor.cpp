@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 
 namespace
 {
@@ -35,6 +36,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout OrganixAudioProcessor::makeL
     add ("input", "Input Gain dB", -24.0f, 24.0f, 0.0f);
     add ("output", "Output Gain dB", -24.0f, 12.0f, 0.0f);
     add ("drywet", "Dry Wet", 0.0f, 1.0f, 0.65f);
+    layout.add (std::make_unique<Choice> (
+        pid ("spectralCompare"), "Spectral Display Input Output or Overlay",
+        juce::StringArray {"INPUT", "OUTPUT", "BEFORE/AFTER"}, 2));
+    add ("spectralTransient", "Spectral Transient Shape", -1.0f, 1.0f, 0.0f);
     // Cross-material modulation is opt-in for old projects and factory patches.
     layout.add (std::make_unique<Bool> (pid ("reactionEnable"), "Material Reactions Enabled", false));
     add ("reactionAmount", "Material Reactions Amount", 0.0f, 1.0f, 0.60f);
@@ -219,6 +224,12 @@ void OrganixAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     engineA.prepare (sampleRate, getTotalNumInputChannels());
     engineB.prepare (sampleRate, getTotalNumInputChannels());
     matterDNA.prepare (sampleRate);
+    spectralView.prepare (sampleRate);
+    audioCpuPercent.store (0.0f,std::memory_order_relaxed);
+    transientShaper.prepare(sampleRate);
+    transientDepthSmooth.reset (sampleRate,0.025);
+    transientDepthSmooth.setCurrentAndTargetValue (
+        raw(parameters,"spectralTransient"));
     modMatrix.prepare (sampleRate);
     morphRender.prepare (sampleRate, getTotalNumInputChannels());
     reactionLink.prepare (sampleRate);
@@ -254,6 +265,9 @@ void OrganixAudioProcessor::releaseResources()
     engineA.reset();
     engineB.reset();
     matterDNA.reset();
+    spectralView.reset();
+    transientShaper.reset();
+    audioCpuPercent.store (0.0f,std::memory_order_relaxed);
     modMatrix.reset();
     morphRender.reset();
     reactionLink.reset();
@@ -281,6 +295,12 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const auto channels = std::min (2, buffer.getNumChannels());
     const int n = buffer.getNumSamples();
     if (channels <= 0 || n <= 0) return;
+    const auto cpuStart=std::chrono::steady_clock::now();
+    // Analyze the true input before any in-place edits by matrix, DNA or DSP.
+    spectralView.analyze (organix::SpectralViewAnalyzer::Stream::Before,
+                          buffer.getReadPointer(0),
+                          channels>1?buffer.getReadPointer(1):nullptr,n,channels);
+    transientDepthSmooth.setTargetValue (raw(parameters,"spectralTransient"));
     const auto matrixSettings=readMatrixSettings();
     const bool matrixOn=matrixSettings.enabled;
 
@@ -541,6 +561,7 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
 
         const float active = bypassSmooth.getNextValue();
+        const float transientDepth = transientDepthSmooth.getNextValue();
         const float gain = outputSmooth.getNextValue();
         const float width = widthSmooth.getNextValue();
         const float morphFraction = morphBlendSmooth.getNextValue();
@@ -617,8 +638,12 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                  morph * morphFraction) * gain;
             const float out = std::abs (mixed) < 0.96f
                 ? mixed : std::tanh (mixed) * 0.96f / std::tanh (0.96f);
-            const float effect = std::isfinite (out) ? juce::jlimit (-1.0f, 1.0f, out) : 0.0f;
-            const float destination = originals[ch] * (1.0f - active) + effect * active;
+            const float effect = std::isfinite(out)
+                ?juce::jlimit(-1.0f,1.0f,out):0.0f;
+            // Stereo attack is modified in the actual wet DSP path. The
+            // host bypass mix remains neutral; parameter 0 is bit-exact.
+            const float shaped=transientShaper.process(ch,effect,transientDepth);
+            const float destination = originals[ch] * (1.0f - active) + shaped * active;
             if (ch == 0) left[i] = destination;
             else right[i] = destination;
             outputSquare += static_cast<double> (destination) * destination;
@@ -646,6 +671,19 @@ void OrganixAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     outputRms.store (static_cast<float> (std::sqrt (outputSquare / divisor)), std::memory_order_relaxed);
     outputPeak.store (peak, std::memory_order_relaxed);
     for (int ch = channels; ch < buffer.getNumChannels(); ++ch) buffer.clear (ch, 0, n);
+    spectralView.analyze (organix::SpectralViewAnalyzer::Stream::After,
+                          buffer.getReadPointer(0),
+                          channels>1?buffer.getReadPointer(1):nullptr,n,channels);
+    // % of one real-time audio buffer consumed by this processor. This is not
+    // a machine-wide CPU percentage, which JUCE cannot measure reliably.
+    const auto cpuEnd=std::chrono::steady_clock::now();
+    const double elapsed=std::chrono::duration<double>(cpuEnd-cpuStart).count();
+    const double budget=static_cast<double>(n)/std::max(1.0,getSampleRate());
+    const float actual=juce::jlimit(0.0f,400.0f,
+                                   static_cast<float>(100.0*elapsed/budget));
+    const float prior=audioCpuPercent.load(std::memory_order_relaxed);
+    audioCpuPercent.store(prior+(actual-prior)*(actual>prior?0.20f:0.07f),
+                          std::memory_order_relaxed);
 }
 
 void OrganixAudioProcessor::setParameter (const char* id, float value)
@@ -693,6 +731,8 @@ void OrganixAudioProcessor::loadFactoryPreset (int index)
     setParameter ("morphEnable", 0.0f);
     setParameter ("morphX", 0.0f);
     setParameter ("morphY", 0.0f);
+    setParameter ("spectralCompare", 2.0f);
+    setParameter ("spectralTransient", 0.0f);
     setParameter ("reactionEnable", 0.0f);
     setParameter ("reactionAmount", 0.60f);
     setParameter ("reactionDirection", 2.0f);
