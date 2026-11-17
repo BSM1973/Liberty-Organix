@@ -766,11 +766,14 @@ void OrganixAudioProcessor::handleMidiLearn (const juce::MidiBuffer& incoming) n
     // are left intact. Actual JUCE host notifications occur on Timer thread.
     for (const auto metadata : incoming)
     {
-        const auto msg = metadata.getMessage();
-        if (! msg.isController()) continue;
-        const int cc = msg.getControllerNumber();
-        const int channel = msg.getChannel();
-        if (cc < 1 || cc > 119 || channel < 1 || channel > 16) continue;
+        // Inspect raw three-byte MIDI CC messages without constructing
+        // MidiMessage objects. getMessage() can allocate for large SysEx.
+        if (metadata.data == nullptr || metadata.numBytes != 3 ||
+            (metadata.data[0] & 0xf0u) != 0xb0u) continue;
+        const int cc = metadata.data[1];
+        const int value = metadata.data[2];
+        const int channel = (metadata.data[0] & 0x0fu) + 1;
+        if (cc < 1 || cc > 119) continue;
         const int slot = (channel - 1) * 128 + cc;
         const int target = midiLearnTarget.exchange (-1, std::memory_order_acq_rel);
         if (target >= 0 && target < midiParameterCount)
@@ -783,7 +786,7 @@ void OrganixAudioProcessor::handleMidiLearn (const juce::MidiBuffer& incoming) n
         if (mapped >= 0 && mapped < midiParameterCount)
         {
             midiValues[static_cast<size_t> (mapped)].store (
-                msg.getControllerValue() / 127.0f, std::memory_order_relaxed);
+                value / 127.0f, std::memory_order_relaxed);
             midiDirty[static_cast<size_t> (mapped)].store (true, std::memory_order_release);
         }
     }
