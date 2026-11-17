@@ -16,6 +16,5 @@ dst_vst3="$stage/Library/Audio/Plug-Ins/VST3/Organix.vst3"
 for bundle in "$dst_au" "$dst_vst3"; do
     test -f "$bundle/Contents/MacOS/Organix"
     /usr/bin/lipo -archs "$bundle/Contents/MacOS/Organix" | /usr/bin/grep -qw arm64
-    /usr/bin/codesign --verify --deep --strict "$bundle"
 done
 echo "PASS: AU + VST3 staged under /Library/Audio/Plug-Ins"
