@@ -118,8 +118,8 @@ void OrganixPresetBrowser::setFrench (bool value)
     search.setTextToShowWhenEmpty (ui::word (french, "Rechercher un nom, un style, un matériau...",
                                                       "Search name, category or material..."), ui::subdued);
     saveName.setTextToShowWhenEmpty (ui::word (french, "Nom de mon preset...", "My preset name..."), ui::subdued);
-    favoriteOnlyButton.setButtonText (ui::word (french, "FAV Favoris uniquement", "FAV Favorites only"));
-    favoriteButton.setButtonText (ui::word (french, "+ Favori", "+ Favorite"));
+    favoriteOnlyButton.setButtonText (ui::word (french, "FAVORIS UNIQUEMENT", "FAVORITES ONLY"));
+    favoriteButton.setButtonText (ui::word (french, "AJOUTER AUX FAVORIS", "ADD TO FAVORITES"));
     loadButton.setButtonText (ui::word (french, "CHARGER", "LOAD"));
     saveButton.setButtonText (ui::word (french, "ENREGISTRER", "SAVE"));
     importButton.setButtonText (ui::word (french, "IMPORTER", "IMPORT"));
@@ -296,8 +296,8 @@ void OrganixPresetBrowser::updateSelection()
     exportButton.setEnabled (valid && results[static_cast<size_t> (selected)].isUser());
     if (valid)
         favoriteButton.setButtonText (isFavorite (results[static_cast<size_t> (selected)])
-                        ? ui::word (french, "FAV Retirer favori", "FAV Unfavorite")
-                        : ui::word (french, "+ Ajouter favori", "+ Add favorite"));
+                        ? ui::word (french, "RETIRER DES FAVORIS", "REMOVE FAVORITE")
+                        : ui::word (french, "AJOUTER AUX FAVORIS", "ADD TO FAVORITES"));
     countLabel.setText (juce::String (results.size()) + " / " + juce::String (library.size()) +
                         ui::word (french, " presets", " presets"), juce::dontSendNotification);
     favoriteOnlyButton.setColour (juce::TextButton::textColourOffId,

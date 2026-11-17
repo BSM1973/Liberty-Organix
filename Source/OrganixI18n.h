@@ -11,6 +11,18 @@ inline juce::String word (bool french, const char* fr, const char* en)
 {
     return juce::String::fromUTF8 (french ? fr : en);
 }
+// Tooltip copy is shared by all rotary controls and follows FR/EN changes.
+inline juce::String dialTooltip (bool french, const juce::String& label)
+{
+    return label + word (french,
+        " - glisser pour régler ; double-clic pour réinitialiser",
+        " - drag to adjust; double-click to reset");
+}
+inline juce::String preciseValueTooltip (bool french)
+{
+    return word (french, "Cliquer pour saisir une valeur précise",
+                         "Click to enter an exact value");
+}
 inline juce::String category (int index, bool french)
 {
     static constexpr std::array<const char*, 11> fr {{

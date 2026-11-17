@@ -458,7 +458,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.slider.setColour (juce::Slider::rotarySliderFillColourId, accent);
     dial.slider.setColour (juce::Slider::rotarySliderOutlineColourId, ui::border);
     dial.slider.setMouseDragSensitivity (180);
-    dial.slider.setTooltip (label + " - drag to adjust; double-click to reset");
+    dial.slider.setTooltip (ui::dialTooltip (french, label));
 
     dial.label.setText (label, juce::dontSendNotification);
     dial.label.setColour (juce::Label::textColourId, ui::secondary);
@@ -471,7 +471,7 @@ void OrganixAudioProcessorEditor::setupDial (Dial& dial, const juce::String& id,
     dial.value.setColour (juce::Label::textColourId, accent);
     dial.value.setColour (juce::Label::backgroundColourId, ui::panel);
     dial.value.setEditable (true, true, false);
-    dial.value.setTooltip ("Click to enter an exact value");
+    dial.value.setTooltip (ui::preciseValueTooltip (french));
     dial.value.onTextChange = [&dial]
     {
         double value = dial.value.getText().getDoubleValue();
@@ -539,11 +539,10 @@ void OrganixAudioProcessorEditor::bindProperties()
         dial.slider.setColour (juce::Slider::rotarySliderFillColourId, ui::accentFor (id));
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (id));
         dial.attachment = std::make_unique<SliderAttachment> (audio.parameters, parameterId, dial.slider);
-        dial.slider.setTooltip (dial.label.getText() + "  -  " +
+        dial.slider.setTooltip (ui::dialTooltip (french, dial.label.getText()) + " / " +
                 ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
                                   selectedLayer == 0 ? "Layer A" : "Layer B") +
-                ui::word (french, "  /  automatisable, double-clic : réinitialiser",
-                                  "  /  automatable, double-click: reset"));
+                ui::word (french, " / automatisable", " / automatable"));
         dial.slider.onValueChange();
     }
 }
@@ -583,8 +582,15 @@ void OrganixAudioProcessorEditor::updateMaterialState()
         dial.value.setColour (juce::Label::textColourId, ui::accentFor (selected));
     }
     for (int i = 0; i < 12; ++i)
-        properties[static_cast<size_t> (i)].label.setText (
-            ui::property (selected, i, french), juce::dontSendNotification);
+    {
+        auto& dial = properties[static_cast<size_t> (i)];
+        const auto label = ui::property (selected, i, french);
+        dial.label.setText (label, juce::dontSendNotification);
+        dial.slider.setTooltip (ui::dialTooltip (french, label) + " / " +
+            ui::word (french, selectedLayer == 0 ? "Couche A" : "Couche B",
+                              selectedLayer == 0 ? "Layer A" : "Layer B") +
+            ui::word (french, " / automatisable", " / automatable"));
+    }
     visualizer.setLayer (selectedLayer);
     repaint();
 }
@@ -664,6 +670,8 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     languageEN.setColour (juce::TextButton::buttonColourId, french ? ui::surface : ui::inset.brighter (0.22f));
     languageFR.setColour (juce::TextButton::textColourOffId, french ? ui::accentFor (0) : ui::secondary);
     languageEN.setColour (juce::TextButton::textColourOffId, french ? ui::secondary : ui::accentFor (0));
+    languageFR.setTooltip (ui::word (french, "Français", "French"));
+    languageEN.setTooltip (ui::word (french, "Anglais", "English"));
     populateMovementChoices();
     refreshMovementState();
     browserButton.setButtonText (ui::word (french, "BIBLIOTHÈQUE", "BROWSER"));
@@ -699,6 +707,18 @@ void OrganixAudioProcessorEditor::changeLanguage (bool useFrench)
     for (int i = 0; i < 8; ++i)
         macros[static_cast<size_t> (i)].label.setText (
             juce::String::fromUTF8 (french ? frMacros[i] : enMacros[i]), juce::dontSendNotification);
+    for (auto& dial : bottom)
+    {
+        dial.slider.setTooltip (ui::dialTooltip (french, dial.label.getText()));
+        dial.value.setTooltip (ui::preciseValueTooltip (french));
+    }
+    for (auto& dial : macros)
+    {
+        dial.slider.setTooltip (ui::dialTooltip (french, dial.label.getText()));
+        dial.value.setTooltip (ui::preciseValueTooltip (french));
+    }
+    for (auto& dial : properties)
+        dial.value.setTooltip (ui::preciseValueTooltip (french));
     for (auto& card : materialButtons) card.setFrench (french);
     bindProperties();
     updateMaterialState();
@@ -710,10 +730,10 @@ void OrganixAudioProcessorEditor::populateMovementChoices()
     const int lastTrajectory = trajectorySelect.getSelectedId();
     const int lastDivision = divisionSelect.getSelectedId();
     trajectorySelect.clear (juce::dontSendNotification);
-    constexpr const char* frenchModes[] = {"MANUEL", "SINUS", "TRIANGLE", "IMPULSION", "ALEATOIRE"};
+    constexpr const char* frenchModes[] = {"MANUEL", "SINUS", "TRIANGLE", "IMPULSION", "ALÉATOIRE"};
     constexpr const char* englishModes[] = {"MANUAL", "SINE", "TRIANGLE", "PULSE", "RANDOM HOLD"};
     for (int i = 0; i < 5; ++i)
-        trajectorySelect.addItem (french ? frenchModes[i] : englishModes[i], i + 1);
+        trajectorySelect.addItem (juce::String::fromUTF8 (french ? frenchModes[i] : englishModes[i]), i + 1);
     divisionSelect.clear (juce::dontSendNotification);
     constexpr const char* beatValues[] = { "1/1", "1/2", "1/4", "1/8", "1/16", "1/8T", "1/16T" };
     for (int i = 0; i < 7; ++i) divisionSelect.addItem (beatValues[i], i + 1);
@@ -810,7 +830,7 @@ OrganixAudioProcessorEditor::OrganixAudioProcessorEditor (OrganixAudioProcessor&
     // painted by native JUCE text buttons using universal Latin letters.
     languageFR.onClick = [this] { changeLanguage (true); };
     languageEN.onClick = [this] { changeLanguage (false); };
-    languageFR.setTooltip ("Francais");
+    languageFR.setTooltip (juce::String::fromUTF8 ("Français"));
     languageEN.setTooltip ("English");
     addAndMakeVisible (languageFR);
     addAndMakeVisible (languageEN);
