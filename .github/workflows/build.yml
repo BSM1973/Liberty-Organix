@@ -81,12 +81,12 @@ jobs:
           if [ ! -x "$AUDIT" ]; then AUDIT="build/Release/organix_actual_processor_audio_audit"; fi
           test -x "$AUDIT"
           "$AUDIT" --render processor-audition
-          test "$(find processor-audition -name '*_real_processor.wav' | wc -l | tr -d ' ')" = "16"
+          test "$(find processor-audition -name '*_real_processor.wav' | wc -l | tr -d ' ')" = "100"
           test "$(wc -l < processor-audition/organix_real_processor_100_QA.csv | tr -d ' ')" = "101"
-      - name: Publish 16 priority audition WAVs and 100 complete-plugin QA measures
+      - name: Publish 100 real-processor WAVs and 100 complete-plugin QA measures
         uses: actions/upload-artifact@v4
         with:
-          name: Organix-Real-Processor-100-QA-16-WAV-v${{ steps.version.outputs.number }}
+          name: Organix-Real-Processor-100-QA-100-WAV-v${{ steps.version.outputs.number }}
           path: |
             processor-audition/*.wav
             processor-audition/organix_real_processor_100_QA.csv
