@@ -89,6 +89,7 @@ jobs:
         with:
           artifact-ids: ${{ steps.published.outputs.artifact-id }}
           path: verified-download
+          merge-multiple: true
       - name: RELEASE GATE 3 — Verify downloaded Artifact includes working AU and VST3 ZIPs
         env:
           ARTIFACT_ID: ${{ steps.published.outputs.artifact-id }}
