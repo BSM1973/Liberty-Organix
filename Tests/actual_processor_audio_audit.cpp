@@ -212,16 +212,17 @@ int main(int argc,char** argv)
         const auto& preset=organix::factoryPresets[static_cast<size_t>(i)];
         const auto& design=organix::factorySoundDesigns[static_cast<size_t>(i)];
         const bool priority=isFocus(i+1);
-        // Long WAV only for 16 priority cases; other programs get a 1s
-        // output measurement. All paths use actual processBlock().
+        // Every program gets a processor output preview. The 16 priority
+        // examples are longer, to expose feedback and slowly evolving motion.
+        // All measurements use the real OrganixAudioProcessor.
         const auto on=process(i,1,nullptr,true);
         if(!on.finite){++nonfinite;continue;}
         if(on.rms<1.0e-6)++silent;
-        if(priority&&save)
+        if(save)
         {
-            ++focusCount;
+            if(priority)++focusCount;
             const auto number=std::to_string(1000+i+1).substr(1);
-            const auto extended=process(i,3,nullptr,true);
+            const auto extended=process(i,priority?3:2,nullptr,true);
             if(!extended.finite){++nonfinite;continue;}
             writeStereoWav(destination/(number+"_"+filename(preset.name)+
                 "_real_processor.wav"),extended.output);
@@ -272,7 +273,7 @@ int main(int argc,char** argv)
     }
     std::cout<<"Actual OrganixAudioProcessor QA: 100 programs, "
              <<featureChecks<<" feature bypass comparisons; "
-             <<focusCount<<" priority WAVs; silent="<<silent
+             <<focusCount<<" priority WAVs among 100 real JUCE previews; silent="<<silent
              <<" nonfinite="<<nonfinite
              <<". These are synthetic sources processed by the real plugin,"
              <<" NOT a human listening evaluation or DAW hosting test.\n";
