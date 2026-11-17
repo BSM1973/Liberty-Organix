@@ -3,6 +3,7 @@
 #include "OrganixMovement.h"
 #include "MatterDNAModulation.h"
 #include "MaterialReactions.h"
+#include "OrganixModMatrix.h"
 #include <array>
 #include <algorithm>
 #include <atomic>
@@ -44,7 +45,8 @@ public:
     void configure (float x, float y,
                     MatterDNA::Features features = {},
                     MatterDNAControls controls = {},
-                    ReactionControls reactions = {}) noexcept;
+                    ReactionControls reactions = {},
+                    const MatrixOffsets* modulation = nullptr) noexcept;
     void processFrame (const float in[2], float out[2], int channels,
                        float x, float y) noexcept;
     bool hasPendingTransition (int scene) const noexcept;
@@ -69,6 +71,7 @@ private:
     std::array<float,4> blockWeights {{ 1.0f, 0.0f, 0.0f, 0.0f }};
     MorphScene continuousBlend {};
     ReactionControls reactionSettings {};
+    MatrixOffsets matrixOffsets {};
     std::array<MorphScene,4> previousContinuous {};
 
     static float renderOne (Pair& pair, const MorphScene& scene,
@@ -78,6 +81,7 @@ private:
     static void configureOne (Pair& pair, const MorphScene& scene,
                               const MorphScene& parameters,
                               MatterDNA::Features features,
-                              MatterDNAControls controls) noexcept;
+                              MatterDNAControls controls,
+                              const MatrixOffsets* modulation) noexcept;
 };
 } // namespace organix
