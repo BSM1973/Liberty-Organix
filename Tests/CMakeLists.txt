@@ -13,6 +13,10 @@ add_executable(organix_ui_geometry ui_geometry.cpp)
 target_compile_features(organix_ui_geometry PRIVATE cxx_std_17)
 add_test(NAME organix_ui_geometry COMMAND organix_ui_geometry)
 
+add_executable(organix_ui_viewport ui_viewport.cpp)
+target_compile_features(organix_ui_viewport PRIVATE cxx_std_17)
+add_test(NAME organix_ui_viewport COMMAND organix_ui_viewport)
+
 add_executable(organix_motion_width motion_width.cpp)
 target_compile_features(organix_motion_width PRIVATE cxx_std_17)
 add_test(NAME organix_motion_width COMMAND organix_motion_width)

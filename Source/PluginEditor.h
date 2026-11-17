@@ -47,7 +47,8 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MatterView)
 };
 
-class OrganixAudioProcessorEditor final : public juce::AudioProcessorEditor, private juce::Timer
+// Inner interface; the host-facing AudioProcessorEditor is OrganixViewportEditor.
+class OrganixAudioProcessorEditor final : public juce::Component, private juce::Timer
 {
 public:
     explicit OrganixAudioProcessorEditor (OrganixAudioProcessor&);
