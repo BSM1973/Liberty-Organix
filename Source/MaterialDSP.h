@@ -105,5 +105,9 @@ private:
     double fs = 44100.0;
     int delayLength = 1;
     int switchFadeLength = 240; // 5 ms at 48 kHz; set during prepare()
+    // Only recompute the resonator's transcendental coefficients when their
+    // real acoustic drivers change; modulation may call configure per block.
+    float modeTone = -1.0f, modeFeedback = -1.0f;
+    Material modeMaterial = Material::Liquid;
 };
 }
