@@ -1,0 +1,90 @@
+name: BOOM Apple notarization via Organix release credentials
+run-name: BOOM Developer ID and Apple Notary via Organix
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/organix-notarization-one-click]
+    paths:
+      - '.github/workflows/boom-apple-notarization.yml'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: organix-credentials-boom-notary
+  cancel-in-progress: false
+jobs:
+  boom-apple:
+    if: github.ref == 'refs/heads/release/organix-notarization-one-click' && github.event_name != 'pull_request'
+    runs-on: macos-15-intel
+    timeout-minutes: 150
+    steps:
+      - name: Checkout pinned verified BOOM release source
+        uses: actions/checkout@v4
+        with:
+          repository: BSM1973/Liberty-BOOM
+          ref: f1fcab0f2881862856eed6339889e99916df4f96
+          persist-credentials: false
+      - name: Verify six Apple credentials in ORGANIX release repository
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          APPLE_P12_PASSWORD: ${{ secrets.APPLE_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: bash Installer/macos/apple_secrets_preflight.sh
+      - name: Read immutable BOOM source version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(sed -n 's/.*project(BOOM VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
+          test -n "$number"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+      - name: Compile universal AU, VST3, Standalone and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON '-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64'
+          cmake --build build --config Release --parallel 3
+          ctest --test-dir build -C Release --output-on-failure
+      - name: Sign, submit to Apple, staple, check Gatekeeper and install
+        env:
+          APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          APPLE_P12_PASSWORD: ${{ secrets.APPLE_P12_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+        run: bash Installer/macos/build_signed_notarized_pkg.sh "${{ steps.version.outputs.number }}"
+      - name: Publish only Accepted Apple-notarized BOOM PKG
+        id: commercial
+        uses: actions/upload-artifact@v4
+        with:
+          name: BOOM-v${{ steps.version.outputs.number }}-macOS-Universal-SIGNED-NOTARIZED
+          path: release-output/BOOM-v${{ steps.version.outputs.number }}-macOS-Universal-SIGNED-NOTARIZED.pkg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - name: Redownload artifact and revalidate its Apple ticket
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.commercial.outputs.artifact-id }}
+          path: verified-boom
+          merge-multiple: true
+      - name: Verify downloadable signed BOOM package
+        run: |
+          set -euo pipefail
+          pkg="verified-boom/BOOM-v${{ steps.version.outputs.number }}-macOS-Universal-SIGNED-NOTARIZED.pkg"
+          test -s "$pkg"
+          /usr/sbin/pkgutil --check-signature "$pkg"
+          /usr/bin/xcrun stapler validate "$pkg"
+          /usr/sbin/spctl --assess --type install --verbose=2 "$pkg"
+      - name: Publish non-secret validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BOOM-Notarization-validation-log
+          path: release-validation/
+          if-no-files-found: warn
+          retention-days: 90
